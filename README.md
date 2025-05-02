@@ -147,13 +147,13 @@ python3 video-feed/feed_cli.py --help
 
 The `feed_cli.py` tool provides a simple way to manage your MediaMTX server:
 
-Those are the avaulable commands (assumes you are in the video-feed directory):
+Those are the available commands (assumes you are in the `video-feed` directory):
 
 ```bash
 # Basic usage (localhost only)
 python3 video-feed/feed_cli.py run
 
-# Expose on local network (for phone cameras)
+# Expose on local network (for phone or IP cameras)
 python3 video-feed/feed_cli.py run --bind 0.0.0.0
 
 # Change the RTSP path (default: video/iphone-1)
@@ -171,7 +171,9 @@ python3 video-feed/feed_cli.py run --bind 0.0.0.0 --config ./my-config.yml
 
 ## Manual Configuration
 
-If you prefer to run MediaMTX directly, create a `mediamtx.yml` with:
+If you prefer to run the server with your own configuration file, create a `mediamtx.yml`. 
+
+Here is an example (you manage the credentials here):
 
 ```yaml
 # Server configuration
