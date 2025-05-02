@@ -1,0 +1,39 @@
+# MediaMTX configuration with multiple stream paths
+
+# Network & protocol settings
+rtspAddress: 0.0.0.0:8554
+rtsp: true
+hls: true
+
+rtspEncryption: optional
+rtspServerKey: server.key
+rtspServerCert: server.crt
+
+# Multiple stream paths
+paths:
+  front-gate:
+    source: publisher
+  back-yard:
+    source: publisher
+
+# Authentication users
+authInternalUsers:
+  - user: publisher
+    pass: test_publisher_pass
+    permissions:
+      - action: publish
+        path: front-gate
+      - action: publish
+        path: back-yard
+
+  - user: viewer
+    pass: test_viewer_pass
+    permissions:
+      - action: read
+        path: front-gate
+      - action: playback
+        path: front-gate
+      - action: read
+        path: back-yard
+      - action: playback
+        path: back-yard

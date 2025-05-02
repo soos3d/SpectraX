@@ -1,21 +1,28 @@
-# QuickCast—Video Stream Manager
+# QuickCast — Video Stream Manager
 
-A lightweight CLI tool for quickly setting up a secure RTSP/HLS video streaming server. Turn your phone or webcam into a network camera with proper authentication and easy-to-use streaming URLs.
+QuickCast is a lightweight CLI tool for turning any phone or webcam into a secure RTSP/HLS streaming source in seconds. It’s built for developers who need a simple, no-fuss way to stream video from a camera to a local machine for processing, testing, or development.
 
-Basically this is ideal when you want to easily stream from your phone or camera to your computer and then process the video feed. I didn't find any simple tool so I just made one.
+There was no easy tool for this—so I built one.
 
-> ⚠️ This tool is under active development and may have some bugs. In the current set up it uses a self-signed certificate for RTSPS streaming, which may trigger warnings in some clients. For production environments, use a certificate issued by a trusted Certificate Authority.
+> ⚠️ Early stage: QuickCast is under active development and may contain bugs. It currently uses a self-signed certificate for RTSPS, which can trigger security warnings in some clients. For production use, replace it with a certificate from a trusted CA.
 
-## Overview
+## What It Does
 
-This tool wraps [MediaMTX](https://github.com/bluenviron/mediamtx) (a powerful RTSP/HLS server) with:
+QuickCast wraps MediaMTX, a powerful RTSP/HLS server, with:
+	•	One-line CLI startup — instantly launch a secure video stream
+	•	Automatic credentials — randomly generated publisher/viewer passwords
+  - Configuration file support - use a custom config file to manage credentials and paths if you want
+	•	Multiple streaming outputs — RTSP (low latency), RTSPS (encrypted), and HLS (browser-compatible)
+	•	Mobile-ready — plug-and-play with Larix Broadcaster or other RTSP clients for phone-based streaming
 
-- **Simple CLI**: Start a secure streaming server with one command
-- **Auto-Credentials**: Generates and manages secure publisher/viewer passwords
-- **Multiple Outputs**: Stream via RTSP (low-latency) or RTSPS (encrypted) or HLS (browser-friendly)
-- **Mobile Ready**: Works great with [Larix Broadcaster](https://softvelum.com/larix/) to stream from phones
+### Usage Options
 
-Ideal for developers who need to quickly get a video feed from a camera into their machine, whether for testing or development.
+	•	Python Package: For integrating streaming into your own Python projects
+→ Found in video-feed/videofeed/
+	•	CLI-Only Tool: Standalone script for quick use
+→ Found in cli-only/
+
+All instructions in this README use the Python package version, it works the same way as the CLI-only script.
 
 ## Prerequisites
 
@@ -97,25 +104,41 @@ python3 video-feed/feed_cli.py run --bind 0.0.0.0
 This command will start the RTSP/HLS server and display connection information. Here is an example:
 
 ```bash
-📲 Encrypted RTSPS Publishing:
-Use in phone apps (e.g. Larix Broadcaster) or other cameras - encrypted & secure
-   URL: rtsps://YOUR_IP:8322/YOUR_PATH
-   Username: publisher
-   Password: YOUR_PUBLISHER_PASSWORD
+⏳ Starting MediaMTX ...
 
-🔐 Encrypted RTSPS Viewer URL (TLS-encrypted):
-Use in OBS or other video platform- encrypted & secure
-   rtsps://viewer:YOUR_VIEWER_PASSWORD@YOUR_IP:8322/YOUR_PATH
+📹 Stream Path: video/iphone-1
+
+📲 Encrypted RTSPS Publishing:
+Use in phone apps (e.g. Larix Broadcaster) or other cameras - encrypted
+  URL: rtsps://192.168.0.15:8322/video/iphone-1
+  User: publisher
+  Pass: YT9H_EweyLxfPYYa_IE9zikeCf2MK4WX
+
+📺 Encrypted RTSPS Viewing:
+Use in OBS or other video platform- encrypted
+  URL: rtsps://viewer:LkD9kSb2QRFY1153Bo0-Ye9LAdkDxhka@192.168.0.15:8322/video/iphone-1
+  • VLC: File > Open Network > rtsps://viewer:LkD9kSb2QRFY1153Bo0-Ye9LAdkDxhka@192.168.0.15:8322/video/iphone-1
+  • OBS: Souces > + > Media Source > Uncheck local File > add RTSP URL to input >
+ rtsps://viewer:LkD9kSb2QRFY1153Bo0-Ye9LAdkDxhka@192.168.0.15:8322/video/iphone-1
+
+🌐 HLS Viewing (browser):
+Use in OBS or other video platform- encrypted
+  URL: http://192.168.0.15:8888/video/iphone-1/index.m3u8
+  Auth: viewer / LkD9kSb2QRFY1153Bo0-Ye9LAdkDxhka
+  Direct URL: http://viewer:LkD9kSb2QRFY1153Bo0-Ye9LAdkDxhka@192.168.0.15:8888/video/iphone-1/index.m3u8
 
 🎥 Unencrypted RTSP Connection Settings:
 Use in phone apps (e.g. Larix Broadcaster) or other cameras - unencrypted
-   URL: rtsp://YOUR_IP:8554/YOUR_PATH
+   URL: rtsp://192.168.0.15:8554/video/iphone-1
    Username: publisher
-   Password: YOUR_PUBLISHER_PASSWORD
+   Password: YT9H_EweyLxfPYYa_IE9zikeCf2MK4WX
+
+🎥 Unencrypted RTSP viewing Settings:
+Use in phone apps (e.g. Larix Broadcaster) or other cameras - unencrypted
 
 👀 Viewer URL (embedded credentials):
 Use in OBS or other video platform- unencrypted
-   rtsp://viewer:YOUR_VIEWER_PASSWORD@YOUR_IP:8554/YOUR_PATH
+   rtsp://viewer:LkD9kSb2QRFY1153Bo0-Ye9LAdkDxhka@192.168.0.15:8554/video/iphone-1
 
 Press Ctrl+C to quit.
 ```
@@ -140,7 +163,7 @@ python3 video-feed/feed_cli.py reset-creds
 Use the `--help` flag to list available commands and options:
 
 ```bash
-python3 video-feed/feed_cli.py --help
+python3 video-feed/feed_cli.py run --help
 ```
 
 ### Available commands
@@ -168,6 +191,32 @@ python3 video-feed/feed_cli.py run --bind 0.0.0.0 --verbose
 # Use a custom config file
 python3 video-feed/feed_cli.py run --bind 0.0.0.0 --config ./my-config.yml
 ```
+
+### Using as a Python Package
+
+You can also use video-feed as a Python package in your own projects:
+
+```python
+# Import specific modules
+from videofeed.credentials import get_credentials
+from videofeed.config import create_config
+from videofeed.network import detect_host_ip
+from videofeed.server import launch_mediamtx
+
+# Example: Get streaming credentials
+creds = get_credentials()
+print(f"Publisher: {creds['publish_user']}:{creds['publish_pass']}")
+print(f"Viewer: {creds['read_user']}:{creds['read_pass']}")
+
+# Example: Create streaming config
+host_ip = detect_host_ip()
+paths = ["video/camera1"]
+config = create_config(host_ip, paths, creds)
+
+# Use other functionality as needed
+```
+
+The modular package structure makes it easy to integrate streaming capabilities into your Python applications without having to run the CLI directly.
 
 ## Manual Configuration
 
