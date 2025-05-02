@@ -104,7 +104,7 @@ python3 video-feed/feed_cli.py run --bind 0.0.0.0
 
 This command will start the RTSP/HLS server and display connection information. Here is an example:
 
-```bash
+```txt
 ⏳ Starting MediaMTX ...
 
 📹 Stream Path: video/iphone-1
