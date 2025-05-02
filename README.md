@@ -74,7 +74,7 @@ pip install -r requirements.txt
 
 By default, QuickCast provides both RTSP and RTSPS endpoints. To enable secure RTSPS streaming:
 
-1. Generate a Self-Signed Certificate
+Generate a Self-Signed Certificate
 
 ```bash
 cd video-feed
@@ -86,7 +86,7 @@ Move both `server.key` and `server.crt` into the same directory as `feed_cli.py`
 
 > ⚠️ Note: Self-signed certificates may trigger warnings in some clients. For production environments, use a certificate issued by a trusted Certificate Authority.
 
-4. Stat the RTSP/HLS Server
+4. Start the RTSP/HLS Server
 
 The `feed_cli.py` tool provides a simple way to manage your MediaMTX server:
 
@@ -143,7 +143,7 @@ Use the `--help` flag to list available commands and options:
 python3 video-feed/feed_cli.py --help
 ```
 
-### Starting the RTSP/HLS Server
+### Available commands
 
 The `feed_cli.py` tool provides a simple way to manage your MediaMTX server:
 
@@ -162,15 +162,6 @@ python3 video-feed/feed_cli.py run --verbose
 
 # Use a custom config file
 python3 video-feed/feed_cli.py run --config ./my-config.yml
-```
-
-### Managing Credentials
-
-Credentials are securely stored in your system's keychain:
-
-```bash
-# Reset stored publisher/viewer credentials
-python3 video-feed/feed_cli.py reset-creds
 ```
 
 ## Manual Configuration
