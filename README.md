@@ -45,8 +45,7 @@ Ideal for developers who need to quickly get a video feed from a camera into the
 
 1. Clone this repository:
    ```bash
-   git clone https://github.com/your-username/perimeter-ai.git
-   cd perimeter-ai
+   git clone https://github.com/soos3d/quickcast-cli.git
    ```
 
 2. Create a virtual environment and activate it:
