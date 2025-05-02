@@ -1,0 +1,31 @@
+# MediaMTX configuration file
+
+# Network settings
+rtspAddress: 0.0.0.0:8554
+rtsp: true
+hls: true
+
+# Paths configuration
+paths:
+  all:
+    source: publisher
+
+# Authentication using new format
+authInternalUsers:
+  # Publisher user
+  - user: publisher
+    # Password will be managed by keychain via feed_cli.py
+    pass: ${PUBLISH_PASS}
+    permissions:
+      - action: publish
+        path: all
+
+  # Viewer user
+  - user: viewer
+    # Password will be managed by keychain via feed_cli.py
+    pass: ${READ_PASS}
+    permissions:
+      - action: read
+        path: all
+      - action: playback
+        path: all
