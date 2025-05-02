@@ -29,7 +29,7 @@ Ideal for developers who need to quickly get a video feed from a camera into the
    brew install mediamtx
    
    # Other platforms
-   # See https://github.com/bluenviron/mediamtx/releases
+   # See https://github.com/bluenviron/mediamtx?tab=readme-ov-file#installation
    ```
 
 2. **Python 3.8+**: For running the CLI tool
