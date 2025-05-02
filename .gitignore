@@ -9,7 +9,7 @@ __pycache__/
 # MediaMTX
 server.crt  
 server.key
-
+mediamtx.yml
 # Distribution / packaging
 .Python
 build/

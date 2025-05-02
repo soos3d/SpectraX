@@ -1,0 +1,32 @@
+# MediaMTX configuration: RTSP/HLS + optional RTSPS
+
+# 1. Network & protocol
+rtspAddress: 0.0.0.0:8554      # unencrypted RTSP/HLS on 8554
+rtsp: true
+hls: true
+
+# enable TLS-encrypted RTSP (RTSPS)
+rtspEncryption: optional      # or "mandatory" if you want to enforce TLS
+rtspServerKey: ${TLS_KEY_PATH}
+rtspServerCert: ${TLS_CERT_PATH}
+
+# 2. Stream paths
+paths:
+  all:
+    source: publisher
+
+# 3. Authenticated users (passwords injected by CLI/keychain)
+authInternalUsers:
+  - user: publisher
+    pass: ${PUBLISH_PASS}
+    permissions:
+      - action: publish
+        path: all
+
+  - user: viewer
+    pass: ${READ_PASS}
+    permissions:
+      - action: read
+        path: all
+      - action: playback
+        path: all

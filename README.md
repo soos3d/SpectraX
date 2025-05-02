@@ -147,6 +147,8 @@ python3 video-feed/feed_cli.py --help
 
 The `feed_cli.py` tool provides a simple way to manage your MediaMTX server:
 
+Those are the avaulable commands (assumes you are in the video-feed directory):
+
 ```bash
 # Basic usage (localhost only)
 python3 video-feed/feed_cli.py run
@@ -155,13 +157,16 @@ python3 video-feed/feed_cli.py run
 python3 video-feed/feed_cli.py run --bind 0.0.0.0
 
 # Change the RTSP path (default: video/iphone-1)
-python3 video-feed/feed_cli.py run --path video/camera1
+python3 video-feed/feed_cli.py run --bind 0.0.0.0 --path video/camera1
+
+# Use multiple paths (specify --path multiple times)
+python3 video-feed/feed_cli.py run --bind 0.0.0.0 --path video/camera1 --path video/camera2
 
 # Show full configuration details (includes credentials be careful)
-python3 video-feed/feed_cli.py run --verbose
+python3 video-feed/feed_cli.py run --bind 0.0.0.0 --verbose
 
 # Use a custom config file
-python3 video-feed/feed_cli.py run --config ./my-config.yml
+python3 video-feed/feed_cli.py run --bind 0.0.0.0 --config ./my-config.yml
 ```
 
 ## Manual Configuration
@@ -174,10 +179,14 @@ paths:
   video/iphone-1:
     source: publisher
 
-# Network settings
+# Network & protocol settings
 rtspAddress: 0.0.0.0:8554
 rtsp: true
 hls: true
+
+rtspEncryption: optional
+rtspServerKey: server.key # Path to your TLS key
+rtspServerCert: server.crt # Path to your TLS certificate
 
 # Authentication configuration
 authInternalUsers:
@@ -193,9 +202,48 @@ authInternalUsers:
         path: video/iphone-1
 ```
 
-Then start the server:
-```bash
-mediamtx ./mediamtx/mediamtx.yml
+You can also configure multiple paths in the same config file:
+
+```yml
+# MediaMTX configuration with multiple stream paths
+
+# Network & protocol settings
+rtspAddress: 0.0.0.0:8554
+rtsp: true
+hls: true
+
+rtspEncryption: optional
+rtspServerKey: server.key # Path to your TLS key
+rtspServerCert: server.crt # Path to your TLS certificate
+
+# Multiple stream paths
+paths:
+  front-gate:
+    source: publisher
+  back-yard:
+    source: publisher
+
+# Authentication users
+authInternalUsers:
+  - user: publisher
+    pass: test_publisher_pass
+    permissions:
+      - action: publish
+        path: front-gate
+      - action: publish
+        path: back-yard
+
+  - user: viewer
+    pass: test_viewer_pass
+    permissions:
+      - action: read
+        path: front-gate
+      - action: playback
+        path: front-gate
+      - action: read
+        path: back-yard
+      - action: playback
+        path: back-yard
 ```
 
 ## Streaming Setup
