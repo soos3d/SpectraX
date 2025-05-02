@@ -8,7 +8,7 @@ There was no easy tool for this—so I built one.
 
 ## What It Does
 
-QuickCast wraps MediaMTX, a powerful RTSP/HLS server, with:
+QuickCast wraps [MediaMTX](https://github.com/bluenviron/mediamtx), a powerful RTSP/HLS server, with:
 
 - One-line CLI startup — instantly launch a secure video stream
 - Automatic credentials — randomly generated publisher/viewer passwords
