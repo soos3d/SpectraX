@@ -45,24 +45,55 @@ def _get_credentials() -> Dict[str, str]:
     }
 
 
-def _create_config(bind_ip: str, path: str, creds: Dict[str, str]) -> Dict:
-    """Create a MediaMTX configuration dictionary."""
-    return {
-        "paths": {path: {"source": creds["publish_user"]}},
+def _create_config(
+    bind_ip: str,
+    path: str,
+    creds: Dict[str, str],
+    tls_key: Optional[str] = None,
+    tls_cert: Optional[str] = None
+) -> Dict:
+    """Create a MediaMTX configuration dictionary with optional TLS."""
+    config = {
+        "paths": {
+            path: {
+                "source": creds["publish_user"]
+            }
+        },
         "rtspAddress": f"{bind_ip}:8554",
         "rtsp": True,
         "hls": True,
+        "rtspTransports": ["tcp"],
         "authInternalUsers": [
-            {"user": creds["publish_user"], "pass": creds["publish_pass"], "ips": [], "permissions": [{"action": "publish", "path": path}]},
-            {"user": creds["read_user"],    "pass": creds["read_pass"],    "ips": [], "permissions": [{"action": "read",    "path": path}, {"action": "playback", "path": path}]}
+            {
+                "user": creds["publish_user"],
+                "pass": creds["publish_pass"],
+                "ips": [],
+                "permissions": [{"action": "publish", "path": path}]
+            },
+            {
+                "user": creds["read_user"],
+                "pass": creds["read_pass"],
+                "ips": [],
+                "permissions": [
+                    {"action": "read", "path": path},
+                    {"action": "playback", "path": path}
+                ]
+            }
         ],
     }
 
+    if tls_key and tls_cert:
+        config["rtspEncryption"] = "optional"
+        config["rtspServerKey"] = tls_key
+        config["rtspServerCert"] = tls_cert
 
-def _write_cfg(cfg_path: Path, bind_ip: str, path: str) -> Dict[str, str]:
+    return config
+
+
+def _write_cfg(cfg_path: Path, bind_ip: str, path: str, tls_key: Optional[str] = None, tls_cert: Optional[str] = None) -> Dict[str, str]:
     """Generate mediamtx.yml at cfg_path and return credential dict."""
     creds = _get_credentials()
-    config = _create_config(bind_ip, path, creds)
+    config = _create_config(bind_ip, path, creds, tls_key, tls_cert)
     
     yaml_text = yaml.safe_dump(config)
     cfg_path.write_text(yaml_text)
@@ -80,20 +111,34 @@ def _detect_host_ip(prefer_iface: Optional[str] = None) -> str:
         return "127.0.0.1"
 
 
-def _print_urls(host: str, path: str, creds: Dict[str, str]) -> None:
-    # Base RTSP URL without credentials, suitable for Larix Broadcaster
+def _print_urls(host: str, path: str, creds: Dict[str, str], rtsps: bool = False) -> None:
     base_url = f"rtsp://{host}:8554/{path}"
 
-    typer.secho("\n🎥 RTSP Connection Settings:", fg=typer.colors.GREEN, bold=True)
+    if rtsps:
+        # For secure publishers like Larix
+        publish_url = f"rtsps://{host}:8322/{path}"
+        typer.secho("\n📲 Encrypted RTSPS Publishing:", fg=typer.colors.CYAN, bold=True)
+        typer.secho("Use in phone apps (e.g. Larix Broadcaster) or other cameras - encrypted & secure", fg=typer.colors.CYAN, bold=True)
+        typer.echo(f"   URL: {publish_url}")
+        typer.echo(f"   Username: {creds['publish_user']}")
+        typer.echo(f"   Password: {creds['publish_pass']}\n")
+
+        # For secure viewers like VLC
+        secure_view_url = f"rtsps://{creds['read_user']}:{creds['read_pass']}@{host}:8322/{path}"
+        typer.secho("🔐 Encrypted RTSPS Viewer URL (TLS-encrypted):", fg=typer.colors.MAGENTA, bold=True)
+        typer.secho("Use in OBS or other video platform- encrypted & secure", fg=typer.colors.MAGENTA, bold=True)
+        typer.echo(f"   {secure_view_url}\n")
+
+    typer.secho("🎥 Unencrypted RTSP Connection Settings:", fg=typer.colors.GREEN, bold=True)
+    typer.secho("Use in phone apps (e.g. Larix Broadcaster) or other cameras - unencrypted", fg=typer.colors.GREEN, bold=True)
     typer.echo(f"   URL: {base_url}")
     typer.echo(f"   Username: {creds['publish_user']}")
     typer.echo(f"   Password: {creds['publish_pass']}\n")
 
-    # Viewer URL with embedded credentials for consumption tools
     view_url = f"rtsp://{creds['read_user']}:{creds['read_pass']}@{host}:8554/{path}"
     typer.secho("👀 Viewer URL (embedded credentials):", fg=typer.colors.BLUE, bold=True)
+    typer.secho("Use in OBS or other video platform- unencrypted", fg=typer.colors.BLUE, bold=True)
     typer.echo(f"   {view_url}\n")
-
 
 def _launch_mediamtx(cfg_path: Path) -> subprocess.Popen[bytes]:
     return subprocess.Popen([MEDIAMTX_BIN, str(cfg_path)])
@@ -129,45 +174,69 @@ def run(
     path: str = typer.Option(DEFAULT_PATH, help="Logical RTSP path to publish/view."),
     bind: str = typer.Option("127.0.0.1", help="Bind IP, use 0.0.0.0 to expose on LAN."),
     config: Optional[Path] = typer.Option(None, "--config", "-c", help="Path to pre-made mediamtx.yml"),
+    tls_key: Optional[Path] = typer.Option(None, help="Path to TLS private key for RTSPS."),
+    tls_cert: Optional[Path] = typer.Option(None, help="Path to TLS certificate for RTSPS."),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show server configuration details."),
 ) -> None:
     """Start RTSP/HLS micro-server and display connection info."""
     _check_mediamtx_installed()
 
-    # Handle configuration context
+    # Use default TLS paths if not provided
+    default_tls_key = Path(__file__).parent / "server.key"
+    default_tls_cert = Path(__file__).parent / "server.crt"
+
+    if not tls_key and default_tls_key.exists():
+        tls_key = default_tls_key
+    if not tls_cert and default_tls_cert.exists():
+        tls_cert = default_tls_cert
+
+    tls_key_path = None
+    tls_cert_path = None
+    use_rtsps = False
+
+    # Validate TLS files
+    if tls_key and tls_cert:
+        if not tls_key.exists():
+            typer.secho(f"TLS key not found: {tls_key}", fg=typer.colors.RED)
+            raise typer.Exit(1)
+        if not tls_cert.exists():
+            typer.secho(f"TLS cert not found: {tls_cert}", fg=typer.colors.RED)
+            raise typer.Exit(1)
+        tls_key_path = str(tls_key)
+        tls_cert_path = str(tls_cert)
+        use_rtsps = True
+    elif tls_key or tls_cert:
+        typer.secho("Error: both --tls-key and --tls-cert must be provided for RTSPS.", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+    # Configuration context
     if config:
         cfg_path = config
         creds = _load_config_credentials(cfg_path)
         temp_context = contextlib.nullcontext()
     else:
-        # Use TemporaryDirectory to automatically clean up after the server finishes
         temp_context = tempfile.TemporaryDirectory(prefix=f"{APP_NAME}-")
 
     with temp_context as tmpdir:
-        # Create config if needed
         if not config:
             cfg_path = Path(tmpdir) / "mediamtx.yml"
-            creds = _write_cfg(cfg_path, bind, path)
-        
-        # Show configuration if verbose mode is enabled
+            creds = _write_cfg(cfg_path, bind, path, tls_key=tls_key_path, tls_cert=tls_cert_path)
+
         if verbose:
             typer.secho("MediaMTX Configuration:", fg=typer.colors.BRIGHT_BLUE, bold=True)
             typer.secho(f"Config file: {cfg_path}", fg=typer.colors.BLUE)
             typer.echo(cfg_path.read_text())
-        
-        # Launch the server
+
         server = _launch_mediamtx(cfg_path)
         typer.echo("⏳ Starting MediaMTX ...")
         try:
             server.wait(timeout=2)
         except subprocess.TimeoutExpired:
-            pass  # This is expected - server is still running
+            pass  # Expected: server is running
 
-        # Display connection information
         host_ip = _detect_host_ip() if bind != "127.0.0.1" else "localhost"
-        _print_urls(host_ip, path, creds)
+        _print_urls(host_ip, path, creds, rtsps=use_rtsps)
 
-        # Wait for user interrupt
         typer.secho("Press Ctrl+C to quit.\n", fg=typer.colors.BRIGHT_BLACK)
         try:
             signal.pause()
