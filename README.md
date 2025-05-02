@@ -2,6 +2,8 @@
 
 A lightweight CLI tool for quickly setting up a secure RTSP/HLS video streaming server. Turn your phone or webcam into a network camera with proper authentication and easy-to-use streaming URLs.
 
+Basically this is ideal when you want to easily stream from your phone or camera to your computer and then process the video feed. I didn't find any simple tool so I just made one.
+
 ## Overview
 
 This tool wraps [MediaMTX](https://github.com/bluenviron/mediamtx) (a powerful RTSP/HLS server) with:
