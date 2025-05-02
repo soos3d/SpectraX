@@ -9,11 +9,12 @@ There was no easy tool for this—so I built one.
 ## What It Does
 
 QuickCast wraps MediaMTX, a powerful RTSP/HLS server, with:
-	- One-line CLI startup — instantly launch a secure video stream
-	- Automatic credentials — randomly generated publisher/viewer passwords
-	- Configuration file support - use a custom config file to manage credentials and paths if you want
-	- Multiple streaming outputs — RTSP (low latency), RTSPS (encrypted), and HLS (browser-compatible)
-	- Mobile-ready — plug-and-play with Larix Broadcaster or other RTSP clients for phone-based streaming
+
+- One-line CLI startup — instantly launch a secure video stream
+- Automatic credentials — randomly generated publisher/viewer passwords
+- Configuration file support - use a custom config file to manage credentials and paths if you want
+- Multiple streaming outputs — RTSP (low latency), RTSPS (encrypted), and HLS (browser-compatible)
+- Mobile-ready — plug-and-play with Larix Broadcaster or other RTSP clients for phone-based streaming
 
 ### Usage Options
 
