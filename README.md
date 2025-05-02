@@ -18,12 +18,12 @@ QuickCast wraps [MediaMTX](https://github.com/bluenviron/mediamtx), a powerful R
 
 ### Usage Options
 
-- Python Package: For integrating streaming into your own Python projects
-→ Found in video-feed/videofeed/
-- CLI-Only Tool: Standalone script for quick use
-→ Found in cli-only/
+- **Python Package**: For integrating streaming into your own Python projects
+→ Found in `video-feed/videofeed/`
+- **CLI-Only Tool**: Standalone script for quick use
+→ Found in `cli-only/`
 
-All instructions in this README use the Python package version, it works the same way as the CLI-only script.
+All instructions in this `README` use the Python package version, it works the same way as the CLI-only script.
 
 ## Prerequisites
 
