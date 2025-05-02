@@ -111,35 +111,35 @@ This command will start the RTSP/HLS server and display connection information. 
 
 📲 Encrypted RTSPS Publishing:
 Use in phone apps (e.g. Larix Broadcaster) or other cameras - encrypted
-  URL: rtsps://192.168.0.15:8322/video/iphone-1
+  URL: rtsps://<host>:8322/video/iphone-1
   User: publisher
-  Pass: YT9H_EweyLxfPYYa_IE9zikeCf2MK4WX
+  Pass: <password>
 
 📺 Encrypted RTSPS Viewing:
 Use in OBS or other video platform- encrypted
-  URL: rtsps://viewer:LkD9kSb2QRFY1153Bo0-Ye9LAdkDxhka@192.168.0.15:8322/video/iphone-1
-  • VLC: File > Open Network > rtsps://viewer:LkD9kSb2QRFY1153Bo0-Ye9LAdkDxhka@192.168.0.15:8322/video/iphone-1
+  URL: rtsps://viewer:<password>@<host>:8322/video/iphone-1
+  • VLC: File > Open Network > rtsps://viewer:<password>@<host>:8322/video/iphone-1
   • OBS: Souces > + > Media Source > Uncheck local File > add RTSP URL to input >
- rtsps://viewer:LkD9kSb2QRFY1153Bo0-Ye9LAdkDxhka@192.168.0.15:8322/video/iphone-1
+ rtsps://viewer:<password>@<host>:8322/video/iphone-1
 
 🌐 HLS Viewing (browser):
 Use in OBS or other video platform- encrypted
-  URL: http://192.168.0.15:8888/video/iphone-1/index.m3u8
-  Auth: viewer / LkD9kSb2QRFY1153Bo0-Ye9LAdkDxhka
-  Direct URL: http://viewer:LkD9kSb2QRFY1153Bo0-Ye9LAdkDxhka@192.168.0.15:8888/video/iphone-1/index.m3u8
+  URL: http://<host>:8888/video/iphone-1/index.m3u8
+  Auth: viewer / <password>
+  Direct URL: http://viewer:<password>@<host>:8888/video/iphone-1/index.m3u8
 
 🎥 Unencrypted RTSP Connection Settings:
 Use in phone apps (e.g. Larix Broadcaster) or other cameras - unencrypted
-   URL: rtsp://192.168.0.15:8554/video/iphone-1
+   URL: rtsp://<host>:8554/video/iphone-1
    Username: publisher
-   Password: YT9H_EweyLxfPYYa_IE9zikeCf2MK4WX
+   Password: <password>
 
 🎥 Unencrypted RTSP viewing Settings:
 Use in phone apps (e.g. Larix Broadcaster) or other cameras - unencrypted
 
 👀 Viewer URL (embedded credentials):
 Use in OBS or other video platform- unencrypted
-   rtsp://viewer:LkD9kSb2QRFY1153Bo0-Ye9LAdkDxhka@192.168.0.15:8554/video/iphone-1
+   rtsp://viewer:<password>@<host>:8554/video/iphone-1
 
 Press Ctrl+C to quit.
 ```
