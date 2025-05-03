@@ -7,6 +7,9 @@ import contextlib
 import tempfile
 from pathlib import Path
 from typing import List, Optional
+import threading
+import json
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 import typer
 
@@ -26,11 +29,12 @@ app = typer.Typer(add_completion=False)
 @app.command()
 def run(
     paths: List[str] = typer.Option(DEFAULT_PATHS, "--path", "-p", help="Logical RTSP path(s) to publish/view. Can be specified multiple times."),
-    bind: str = typer.Option("127.0.0.1", help="Bind IP, use 0.0.0.0 to expose on LAN."),
+    bind: str = typer.Option("0.0.0.0", help="Bind IP (default), listens on all interfaces (LAN + localhost); use 127.0.0.1 to restrict to local only."),
     config: Optional[Path] = typer.Option(None, "--config", "-c", help="Path to pre-made mediamtx.yml"),
     tls_key: Optional[Path] = typer.Option(None, help="Path to TLS private key for RTSPS."),
     tls_cert: Optional[Path] = typer.Option(None, help="Path to TLS certificate for RTSPS."),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show server configuration details."),
+    api_port: Optional[int] = typer.Option(None, "--api-port", "-a", help="Port for JSON status API."),
 ) -> None:
     """Start RTSP/HLS micro-server and display connection info."""
     check_mediamtx_installed(MEDIAMTX_BIN)
@@ -91,8 +95,28 @@ def run(
         except subprocess.TimeoutExpired:
             pass  # Expected: server is running
 
-        host_ip = detect_host_ip() if bind != "127.0.0.1" else "localhost"
+        host_ip = detect_host_ip()
         print_urls(host_ip, config_paths, creds, rtsps=use_rtsps)
+
+        # JSON status API endpoint
+        if api_port:
+            class StatusHandler(BaseHTTPRequestHandler):
+                def do_GET(self):
+                    if self.path == "/paths":
+                        data = {"count": len(config_paths), "paths": config_paths}
+                        resp = json.dumps(data)
+                        self.send_response(200)
+                        self.send_header("Content-Type", "application/json")
+                        self.end_headers()
+                        self.wfile.write(resp.encode())
+                    else:
+                        self.send_response(404)
+            api_server = HTTPServer(("0.0.0.0", api_port), StatusHandler)
+
+            threading.Thread(target=api_server.serve_forever, daemon=True).start()
+            typer.echo(f"\n 🔍 Paths API: Use this URL in the UI to auto-detect available paths \n")
+            typer.echo(f"🖥️ If your UI is running on the same device as this server: http://127.0.0.1:{api_port}/paths")
+            typer.echo(f"🌐 If your UI is running on a different device: http://{host_ip}:{api_port}/paths")
 
         typer.secho("Press Ctrl+C to quit.\n", fg=typer.colors.BRIGHT_BLACK)
         try:

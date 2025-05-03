@@ -101,7 +101,7 @@ Move both `server.key` and `server.crt` into the same directory as `feed_cli.py`
 The `feed_cli.py` tool provides a simple way to manage your MediaMTX server:
 
 ```bash
-python3 video-feed/feed_cli.py run --bind 0.0.0.0
+python3 video-feed/feed_cli.py run
 ```
 
 This command will start the RTSP/HLS server and display connection information. Here is an example:
@@ -146,7 +146,6 @@ Use in OBS or other video platform- unencrypted
 Press Ctrl+C to quit.
 ```
 
-> ⚠️ Use the --bind 0.0.0.0 option to display the clear connection information for your local network. The camera device must be on the same wifi network as the server.
 
 Now simply use the RTSP connection settings to set up your phone or camera to stream to the server. Use the viewer URL to view the stream in any RTSP player like OBS or VLC.
 
@@ -196,24 +195,29 @@ The `feed_cli.py` tool provides a simple way to manage your MediaMTX server:
 
 Those are the available commands (assumes you are in the `video-feed` directory):
 
+By default, the server binds to all interfaces (LAN + localhost). Pass `--bind 127.0.0.1` to restrict access to this machine only.
+
 ```bash
-# Basic usage (localhost only)
+# Default: bind to all interfaces (LAN + localhost)
 python3 video-feed/feed_cli.py run
 
-# Expose on local network (for phone or IP cameras)
-python3 video-feed/feed_cli.py run --bind 0.0.0.0
+# Restrict to local-only (loopback)
+python3 video-feed/feed_cli.py run --bind 127.0.0.1
 
 # Change the RTSP path (default: video/iphone-1)
-python3 video-feed/feed_cli.py run --bind 0.0.0.0 --path video/camera1
+python3 video-feed/feed_cli.py run  --path video/camera1
 
 # Use multiple paths (specify --path multiple times)
-python3 video-feed/feed_cli.py run --bind 0.0.0.0 --path video/camera1 --path video/camera2
+python3 video-feed/feed_cli.py run  --path video/camera1 --path video/camera2
 
 # Show full configuration details (includes credentials be careful)
-python3 video-feed/feed_cli.py run --bind 0.0.0.0 --verbose
+python3 video-feed/feed_cli.py run --verbose
 
 # Use a custom config file
-python3 video-feed/feed_cli.py run --bind 0.0.0.0 --config ./my-config.yml
+python3 video-feed/feed_cli.py run --config ./my-config.yml
+
+# Expose JSON path API (use to to fetch available paths)
+python3 video-feed/feed_cli.py run --api-port 3333
 ```
 
 ### Using as a Python Package
