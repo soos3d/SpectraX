@@ -22,6 +22,8 @@ QuickCast wraps [MediaMTX](https://github.com/bluenviron/mediamtx), a powerful R
 → Found in `video-feed/videofeed/`
 - **CLI-Only Tool**: Standalone script for quick use
 → Found in `cli-only/`
+- **Streamlit UI**: Web-based interface for easy stream management
+→ Found in `basic-ui/streamlit_ui.py`
 
 All instructions in this `README` use the Python package version, it works the same way as the CLI-only script.
 
@@ -149,6 +151,27 @@ Press Ctrl+C to quit.
 Now simply use the RTSP connection settings to set up your phone or camera to stream to the server. Use the viewer URL to view the stream in any RTSP player like OBS or VLC.
 
 Here is a video on how to set up Larix Broadcaster to stream to the server: [https://www.youtube.com/watch?v=Dhj0_QbtfTw](https://www.youtube.com/watch?v=Dhj0_QbtfTw)
+
+## Streamlit Web Interface
+
+QuickCast includes a basic web-based interface built with Streamlit for easy testing. You can use this provider UI or use the privded view URL to view the stream in any RTSP player like OBS or VLC.
+
+> ⚠️ This UI is meant to be used as a quick test tool and is not recommended for production use. There are many features missing and it is not secure. (for example credentials are stored in the browser's local storage and are not encrypted, uses http instead of https, etc.)
+
+### Running the UI
+
+1. Start the Streamlit interface:
+   ```bash
+   cd basic-ui
+   streamlit run streamlit_ui.py
+   ```
+
+2. Open your browser to the displayed URL (typically http://localhost:8501)
+
+3. Enter your stream URL and viewer credentials in the sidebar (it now defaults to the standard `http://localhost:8888/video/iphone-1/index.m3u8`)
+  - Use the same credential provided by the CLI or your custom config file
+
+4. Use the Advanced Settings to configure buffer length and reconnection behavior for optimal playback
 
 ### Managing Credentials
 

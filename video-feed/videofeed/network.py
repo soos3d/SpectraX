@@ -62,16 +62,12 @@ def print_urls(host: str, paths: List[str], creds: Dict[str, str], rtsps: bool =
         typer.secho("Use in phone apps (e.g. Larix Broadcaster) or other cameras - unencrypted", fg=typer.colors.GREEN, bold=True)
         typer.echo(f"   URL: {base_url}")
         typer.echo(f"   Username: {creds['publish_user']}")
-        typer.echo(f"   Password: {creds['publish_pass']}\n")
+        typer.echo(f"   Password: {creds['publish_pass']}")
 
         # Viewer URL (embedded credentials)
-        typer.secho("🎥 Unencrypted RTSP viewing Settings:", fg=typer.colors.BLUE, bold=True)
-        typer.secho("Use in phone apps (e.g. Larix Broadcaster) or other cameras - unencrypted", fg=typer.colors.BLUE, bold=True)
-        view_url = f"rtsp://{creds['read_user']}:{creds['read_pass']}@{host}:8554/{path}"
         typer.secho("\n👀 Viewer URL (embedded credentials):", fg=typer.colors.BLUE, bold=True)
         typer.secho("Use in OBS or other video platform- unencrypted", fg=typer.colors.BLUE, bold=True)
-        typer.echo(f"   {view_url}\n")
-
+        typer.echo(f"   {view_url}")
 
 def check_mediamtx_installed(binary_name: str = "mediamtx") -> None:
     """Check if mediamtx binary is available and exit if not."""
