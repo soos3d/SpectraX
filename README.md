@@ -6,6 +6,18 @@ There was no easy tool for this—so I built one.
 
 > ⚠️ Early stage: QuickCast is under active development and may contain bugs. It currently uses a self-signed certificate for RTSPS, which can trigger security warnings in some clients. For production use, replace it with a certificate from a trusted CA.
 
+## Table of Contents
+
+- [What It Does](#what-it-does)
+- [Prerequisites](#prerequisites)
+- [Quickstart](#quickstart)
+- [Streamlit Web Interface](#streamlit-web-interface)
+- [Server CLI Usage](#server-cli-usage)
+- [Object Detection with YOLO](#object-detection-with-yolo)
+- [Manual Configuration](#manual-configuration)
+- [Streaming Setup](#streaming-setup)
+- [Troubleshooting](#troubleshooting)
+
 ## What It Does
 
 QuickCast wraps [MediaMTX](https://github.com/bluenviron/mediamtx), a powerful RTSP/HLS server, with:
