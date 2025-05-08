@@ -6,7 +6,7 @@ import subprocess
 import contextlib
 import tempfile
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 import threading
 import json
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -17,6 +17,7 @@ from videofeed.credentials import get_credentials, reset_creds, load_config_cred
 from videofeed.config import write_cfg, load_config_paths
 from videofeed.network import detect_host_ip, print_urls, check_mediamtx_installed
 from videofeed.server import launch_mediamtx
+from videofeed.visualizer import start_visualizer
 
 # Application constants
 APP_NAME = "video-feed"
@@ -132,3 +133,56 @@ def reset():
     """Clear stored publisher/viewer credentials."""
     reset_creds()
     typer.echo("🔑 Credentials reset; regenerated on next run.")
+
+
+@app.command()
+def detect(
+    rtsp_url: str = typer.Option("", "--rtsp-url", "-r", help="RTSP URL with credentials"),
+    path: str = typer.Option("", "--path", "-p", help="Logical RTSP path to view (alternative to full URL)"),
+    host: str = typer.Option("127.0.0.1", "--host", "-h", help="Host to bind the visualization server"),
+    port: int = typer.Option(8000, "--port", help="Port to bind the visualization server"),
+    model: str = typer.Option("yolov8n.pt", "--model", "-m", help="YOLO model to use"),
+    confidence: float = typer.Option(0.4, "--confidence", "-c", help="Detection confidence threshold"),
+    width: int = typer.Option(960, "--width", help="Output video width"),
+    height: int = typer.Option(540, "--height", help="Output video height")
+) -> None:
+    """Start object detection visualizer with an RTSP stream."""
+    # Check if one of rtsp_url or path is provided
+    if not rtsp_url and not path:
+        typer.secho("Error: Either --rtsp-url or --path must be provided.", fg=typer.colors.RED)
+        raise typer.Exit(1)
+    
+    # If path is provided, construct the RTSP URL with credentials
+    if path and not rtsp_url:
+        # Get credentials
+        creds = get_credentials()
+        # Detect host IP
+        host_ip = detect_host_ip()
+        # Construct RTSP URL
+        rtsp_url = f"rtsp://{creds['read_user']}:{creds['read_pass']}@{host_ip}:8554/{path}"
+        typer.echo(f"Using auto-generated RTSP URL: {rtsp_url}")
+    
+    # Define the resolution
+    resolution = (width, height)
+    
+    try:
+        # Start the visualizer
+        typer.secho(f"Starting object detection visualizer at http://{host}:{port}", fg=typer.colors.GREEN)
+        typer.secho(f"Using model: {model} with confidence: {confidence}", fg=typer.colors.BLUE)
+        typer.secho(f"Processing RTSP stream: {rtsp_url}", fg=typer.colors.YELLOW)
+        typer.secho("Press Ctrl+C to quit.", fg=typer.colors.BRIGHT_BLACK)
+        
+        # Start the visualizer
+        start_visualizer(
+            rtsp_url=rtsp_url,
+            host=host,
+            port=port,
+            model_path=model,
+            confidence=confidence,
+            resolution=resolution
+        )
+    except KeyboardInterrupt:
+        typer.echo("\nShutting down...")
+    except Exception as e:
+        typer.secho(f"Error: {e}", fg=typer.colors.RED)
+        raise typer.Exit(1)

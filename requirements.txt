@@ -52,3 +52,6 @@ typing_extensions==4.13.2
 tzdata==2025.2
 urllib3==2.4.0
 zipp==3.21.0
+ultralytics==8.1.7
+fastapi==0.110.1
+uvicorn==0.28.0

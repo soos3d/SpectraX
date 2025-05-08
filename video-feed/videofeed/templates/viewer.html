@@ -1,0 +1,89 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Video Feed with Object Detection</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        .container {
+            width: 90%;
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: white;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            border-radius: 5px;
+        }
+        h1 {
+            color: #2c3e50;
+        }
+        .video-container {
+            width: 100%;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .video-feed {
+            max-width: 100%;
+            border: 1px solid #ddd;
+            box-shadow: 0 0 5px rgba(0,0,0,0.2);
+        }
+        .info-panel {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+            border-left: 4px solid #3498db;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e8f5e9;
+            border-radius: 5px;
+        }
+        pre {
+            background-color: #f8f8f8;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Video Feed with YOLO Object Detection</h1>
+        
+        <div class="info-panel">
+            <p><strong>Source:</strong> {{ source }}</p>
+            <p><strong>Model:</strong> {{ model }}</p>
+        </div>
+        
+        <div class="video-container">
+            <img src="/video/stream" class="video-feed" alt="Video Feed with Object Detection">
+        </div>
+        
+        <div class="status">
+            <h3>Status Information</h3>
+            <div id="statusInfo">Loading...</div>
+        </div>
+    </div>
+    
+    <script>
+        // Fetch status info every 2 seconds
+        setInterval(async function() {
+            try {
+                const response = await fetch('/status');
+                const data = await response.json();
+                document.getElementById('statusInfo').innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+            } catch (error) {
+                console.error('Error fetching status:', error);
+            }
+        }, 2000);
+    </script>
+</body>
+</html>
