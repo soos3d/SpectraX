@@ -137,44 +137,60 @@ def reset():
 
 @app.command()
 def detect(
-    rtsp_url: str = typer.Option("", "--rtsp-url", "-r", help="RTSP URL with credentials"),
-    path: str = typer.Option("", "--path", "-p", help="Logical RTSP path to view (alternative to full URL)"),
-    host: str = typer.Option("127.0.0.1", "--host", "-h", help="Host to bind the visualization server"),
+    rtsp_urls: List[str] = typer.Option([], "--rtsp-url", "-r", help="RTSP URL with credentials (can be specified multiple times)"),
+    paths: List[str] = typer.Option([], "--path", "-p", help="Logical RTSP path to view (can be specified multiple times)"),
+    host: str = typer.Option("127.0.0.1", "--host", "--host-ip", help="Host to bind the visualization server"),
     port: int = typer.Option(8000, "--port", help="Port to bind the visualization server"),
     model: str = typer.Option("yolov8n.pt", "--model", "-m", help="YOLO model to use"),
     confidence: float = typer.Option(0.4, "--confidence", "-c", help="Detection confidence threshold"),
     width: int = typer.Option(960, "--width", help="Output video width"),
     height: int = typer.Option(540, "--height", help="Output video height")
 ) -> None:
-    """Start object detection visualizer with an RTSP stream."""
-    # Check if one of rtsp_url or path is provided
-    if not rtsp_url and not path:
-        typer.secho("Error: Either --rtsp-url or --path must be provided.", fg=typer.colors.RED)
+    """Start object detection visualizer with multiple RTSP streams."""
+    # Check if either rtsp_urls or paths are provided
+    if not rtsp_urls and not paths:
+        typer.secho("Error: Either --rtsp-url or --path must be provided at least once.", fg=typer.colors.RED)
         raise typer.Exit(1)
     
-    # If path is provided, construct the RTSP URL with credentials
-    if path and not rtsp_url:
-        # Get credentials
+    # Get credentials for paths
+    if paths:
         creds = get_credentials()
         # Detect host IP
         host_ip = detect_host_ip()
-        # Construct RTSP URL
-        rtsp_url = f"rtsp://{creds['read_user']}:{creds['read_pass']}@{host_ip}:8554/{path}"
-        typer.echo(f"Using auto-generated RTSP URL: {rtsp_url}")
+        
+    # Collect all URLs to process
+    all_urls = list(rtsp_urls)  # Start with explicit URLs
+    
+    # For each path, construct the RTSPS URL with credentials
+    for path in paths:
+        # Construct RTSPS URL (encrypted)
+        path_url = f"rtsps://{creds['read_user']}:{creds['read_pass']}@{host_ip}:8322/{path}"
+        all_urls.append(path_url)
+        typer.echo(f"Added RTSPS URL for path '{path}': {path_url.split('@')[0]}@***/{path}")
     
     # Define the resolution
     resolution = (width, height)
+    
+    # We'll let the visualizer handle the signals and shutdown process
+    # This avoids competing signal handlers
     
     try:
         # Start the visualizer
         typer.secho(f"Starting object detection visualizer at http://{host}:{port}", fg=typer.colors.GREEN)
         typer.secho(f"Using model: {model} with confidence: {confidence}", fg=typer.colors.BLUE)
-        typer.secho(f"Processing RTSP stream: {rtsp_url}", fg=typer.colors.YELLOW)
-        typer.secho("Press Ctrl+C to quit.", fg=typer.colors.BRIGHT_BLACK)
+        typer.secho(f"Processing {len(all_urls)} streams", fg=typer.colors.YELLOW)
         
-        # Start the visualizer
+        # Log each stream being processed (with masked credentials)
+        for i, url in enumerate(all_urls):
+            protocol = url.split('://')[0] if '://' in url else 'rtsp'
+            masked = f"{protocol}://***:***@" + (url.split('@')[-1] if '@' in url else url)
+            typer.secho(f"  Stream {i+1}: {masked}", fg=typer.colors.BRIGHT_BLACK)
+            
+        typer.secho("Press Ctrl+C once to exit cleanly.", fg=typer.colors.BRIGHT_BLACK)
+        
+        # Start the visualizer with all URLs
         start_visualizer(
-            rtsp_url=rtsp_url,
+            rtsp_urls=all_urls,
             host=host,
             port=port,
             model_path=model,
@@ -182,7 +198,8 @@ def detect(
             resolution=resolution
         )
     except KeyboardInterrupt:
-        typer.echo("\nShutting down...")
+        # Let the visualizer handle cleanup, then exit normally
+        typer.secho("\nExiting...", fg=typer.colors.YELLOW)
     except Exception as e:
         typer.secho(f"Error: {e}", fg=typer.colors.RED)
         raise typer.Exit(1)
