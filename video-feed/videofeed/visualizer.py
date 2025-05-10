@@ -10,12 +10,14 @@ import threading
 import time
 from typing import Dict, List, Optional, Set
 
-from fastapi import FastAPI, HTTPException, Request, Query
+from fastapi import FastAPI, HTTPException, Request, Query, Body
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import uvicorn
 
 from videofeed.detector import DetectorManager
+from videofeed.credentials import get_credentials, APP_NAME
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
@@ -34,8 +36,15 @@ app.add_middleware(
     allow_headers=["*"],  # Allow all headers
 )
 
+# Authentication schema for simple credential verification
+class UserCredentials(BaseModel):
+    username: str
+    password: str
+
 # Global detector manager instance
 detector_manager = None
+
+
 
 @app.get("/video/stream")
 async def video_feed(feed: Optional[str] = None):
@@ -116,6 +125,35 @@ async def shutdown_detector():
         detector_manager.stop_all()
         detector_manager = None
     logger.info("Detector stopped successfully")
+
+
+# Simple credential verification endpoint
+@app.post("/auth/verify")
+async def verify_credentials(user_creds: UserCredentials):
+    """Verify if credentials match those in the system keychain."""
+    creds = get_credentials()
+    
+    # Check publisher credentials
+    if user_creds.username == creds["publish_user"] and user_creds.password == creds["publish_pass"]:
+        return {
+            "authenticated": True,
+            "user_type": "publisher",
+            "username": creds["publish_user"]
+        }
+    
+    # Check viewer credentials
+    if user_creds.username == creds["read_user"] and user_creds.password == creds["read_pass"]:
+        return {
+            "authenticated": True,
+            "user_type": "viewer",
+            "username": creds["read_user"]
+        }
+    
+    # Invalid credentials
+    raise HTTPException(
+        status_code=401,
+        detail="Invalid credentials"
+    )
 
 def force_exit():
     """Force exit after a timeout."""

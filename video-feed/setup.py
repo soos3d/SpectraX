@@ -10,6 +10,8 @@ setup(
         "typer",
         "keyring",
         "pyyaml",
+        "fastapi",
+        "uvicorn",
     ],
     entry_points={
         "console_scripts": [
