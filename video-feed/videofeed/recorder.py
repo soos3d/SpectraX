@@ -11,7 +11,7 @@ import cv2
 import numpy as np
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
@@ -559,93 +559,13 @@ class RecordingManager:
         except Exception as e:
             logger.error(f"Error during recordings cleanup: {e}")
             
-    def get_recordings(self, 
-                       stream_id: Optional[str] = None, 
-                       limit: int = 100, 
-                       offset: int = 0,
-                       start_date: Optional[str] = None,
-                       end_date: Optional[str] = None) -> List[Dict]:
-        """Get recordings from the database.
-        
-        Args:
-            stream_id: Filter by stream ID (optional)
-            limit: Maximum number of recordings to return
-            offset: Offset for pagination
-            start_date: Start date filter (ISO format)
-            end_date: End date filter (ISO format)
-            
-        Returns:
-            List of recording information dictionaries
-        """
-        query = 'SELECT * FROM recordings WHERE retained = 1'
-        params = []
-        
-        if stream_id:
-            query += ' AND stream_id = ?'
-            params.append(stream_id)
-            
-        if start_date:
-            query += ' AND timestamp >= ?'
-            params.append(start_date)
-            
-        if end_date:
-            query += ' AND timestamp <= ?'
-            params.append(end_date)
-            
-        query += ' ORDER BY timestamp DESC LIMIT ? OFFSET ?'
-        params.extend([limit, offset])
-        
-        try:
-            cursor = self.db_conn.cursor()
-            cursor.execute(query, params)
-            
-            columns = [col[0] for col in cursor.description]
-            recordings = []
-            
-            for row in cursor.fetchall():
-                recording = dict(zip(columns, row))
-                
-                # Parse JSON fields
-                recording['objects_detected'] = json.loads(recording['objects_detected'])
-                
-                recordings.append(recording)
-                
-            return recordings
-        except Exception as e:
-            logger.error(f"Error retrieving recordings: {e}")
-            return []
-            
-    def delete_recording(self, recording_id: int) -> bool:
-        """Delete a recording and its files.
-        
-        Args:
-            recording_id: ID of the recording to delete
-            
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            cursor = self.db_conn.cursor()
-            cursor.execute('SELECT file_path, thumbnail_path FROM recordings WHERE id = ?', (recording_id,))
-            result = cursor.fetchone()
-            
-            if not result:
-                return False
-                
-            file_path, thumbnail_path = result
-            
-            # Delete the files
-            if os.path.exists(file_path):
-                os.remove(file_path)
-            if thumbnail_path and os.path.exists(thumbnail_path):
-                os.remove(thumbnail_path)
-                
-            # Delete from database
-            cursor.execute('DELETE FROM recordings WHERE id = ?', (recording_id,))
-            self.db_conn.commit()
-            
-            logger.info(f"Deleted recording {recording_id}")
-            return True
-        except Exception as e:
-            logger.error(f"Error deleting recording {recording_id}: {e}")
-            return False
+    # The following methods have been moved to api.py module:
+    # - get_recordings
+    # - get_recordings_count
+    # - get_recording_by_id
+    # - get_alerts
+    # - get_alerts_count
+    # - get_object_stats
+    # - get_time_stats
+    # - get_stream_stats
+    # - delete_recording

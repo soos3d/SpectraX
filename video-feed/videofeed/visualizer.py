@@ -22,6 +22,7 @@ import os
 from videofeed.detector import DetectorManager
 from videofeed.credentials import get_credentials, APP_NAME
 from videofeed.recorder import RecordingManager
+from videofeed.api import RecordingsAPI
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
@@ -49,8 +50,9 @@ class UserCredentials(BaseModel):
     username: str
     password: str
 
-# Global detector manager instance
+# Global instances
 detector_manager = None
+recordings_api = None
 
 # Directory for recordings is configured at runtime
 recordings_directory = None
@@ -127,87 +129,98 @@ async def get_recordings(
     sort_order: str = Query("desc", regex=r"^(asc|desc)$")
 ):
     """Get list of recordings from the database with filtering and sorting options."""
-    global detector_manager
-    if detector_manager is None:
-        raise HTTPException(status_code=503, detail="Detector manager not initialized")
+    global recordings_api, recordings_directory
     
-    if not detector_manager.recording_manager:
-        raise HTTPException(status_code=404, detail="Recording is not enabled")
+    if recordings_api is None:
+        raise HTTPException(status_code=503, detail="Recording API not initialized")
     
-    recordings = detector_manager.recording_manager.get_recordings(
-        stream_id=stream_id,
-        limit=limit,
-        offset=offset,
-        start_date=start_date,
-        end_date=end_date,
-        object_type=object_type,
-        min_confidence=min_confidence,
-        sort_by=sort_by,
-        sort_order=sort_order
-    )
-    
-    # Format each recording with proper URLs
-    host_url = str(request.base_url).rstrip('/')
-    for recording in recordings:
-        # Extract just the filename from paths
-        video_filename = os.path.basename(recording['file_path'])
-        thumbnail_filename = os.path.basename(recording['thumbnail_path']) if recording['thumbnail_path'] else None
+    try:
+        # Get recordings
+        recordings = recordings_api.get_recordings(
+            stream_id=stream_id,
+            limit=limit,
+            offset=offset,
+            start_date=start_date,
+            end_date=end_date,
+            object_type=object_type,
+            min_confidence=min_confidence,
+            sort_by=sort_by,
+            sort_order=sort_order
+        )
         
-        # Add direct URLs for frontend use
-        recording['video_url'] = f"{host_url}/recordings/{video_filename}"
-        recording['thumbnail_url'] = f"{host_url}/recordings/{thumbnail_filename}" if thumbnail_filename else None
-        
-    return {
-        "recordings": recordings,
-        "total": detector_manager.recording_manager.get_recordings_count(
-            stream_id=stream_id, 
-            start_date=start_date, 
+        # Get total count for pagination
+        total = recordings_api.get_recordings_count(
+            stream_id=stream_id,
+            start_date=start_date,
             end_date=end_date,
             object_type=object_type,
             min_confidence=min_confidence
-        ),
-        "limit": limit,
-        "offset": offset
-    }
+        )
+        
+        # Transform file paths to URLs
+        for rec in recordings:
+            if rec.get('file_path'):
+                rel_path = os.path.relpath(rec['file_path'], recordings_directory)
+                rec['file_url'] = f"/recordings/{rel_path}"
+            
+            if rec.get('thumbnail_path'):
+                rel_path = os.path.relpath(rec['thumbnail_path'], recordings_directory)
+                rec['thumbnail_url'] = f"/recordings/{rel_path}"
+        
+        return {
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+            "recordings": recordings
+        }
+    except Exception as e:
+        logger.error(f"Error retrieving recordings: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/api/recordings/{recording_id}")
 async def delete_recording(recording_id: int):
     """Delete a recording by ID."""
-    global detector_manager
-    if detector_manager is None:
-        raise HTTPException(status_code=503, detail="Detector manager not initialized")
+    global recordings_api
     
-    if not detector_manager.recording_manager:
-        raise HTTPException(status_code=404, detail="Recording is not enabled")
+    if recordings_api is None:
+        raise HTTPException(status_code=503, detail="Recording API not initialized")
     
-    success = detector_manager.recording_manager.delete_recording(recording_id)
-    if not success:
-        raise HTTPException(status_code=404, detail=f"Recording {recording_id} not found")
-    
-    return {"success": True, "id": recording_id}
+    try:
+        success = recordings_api.delete_recording(recording_id)
+        if not success:
+            raise HTTPException(status_code=404, detail=f"Recording {recording_id} not found")
+        
+        return {"success": True, "message": f"Recording {recording_id} deleted"}
+    except Exception as e:
+        logger.error(f"Error deleting recording {recording_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/recordings/{recording_id}")
 async def get_recording_detail(recording_id: int):
     """Get detailed information about a specific recording."""
-    global detector_manager
-    if detector_manager is None:
-        raise HTTPException(status_code=503, detail="Detector manager not initialized")
+    global recordings_api, recordings_directory
     
-    if not detector_manager.recording_manager:
-        raise HTTPException(status_code=404, detail="Recording is not enabled")
+    if recordings_api is None:
+        raise HTTPException(status_code=503, detail="Recording API not initialized")
     
-    recording = detector_manager.recording_manager.get_recording_by_id(recording_id)
-    if not recording:
-        raise HTTPException(status_code=404, detail=f"Recording {recording_id} not found")
-    
-    # Format with URLs
-    host_url = str(request.base_url).rstrip('/')
-    video_filename = os.path.basename(recording['file_path'])
-    thumbnail_filename = os.path.basename(recording['thumbnail_path']) if recording['thumbnail_path'] else None
-    recording['video_url'] = f"{host_url}/recordings/{video_filename}"
-    recording['thumbnail_url'] = f"{host_url}/recordings/{thumbnail_filename}" if thumbnail_filename else None
-    
-    return recording
+    try:
+        recording = recordings_api.get_recording_by_id(recording_id)
+        if not recording:
+            raise HTTPException(status_code=404, detail=f"Recording {recording_id} not found")
+        
+        # Transform file paths to URLs
+        if recording.get('file_path'):
+            rel_path = os.path.relpath(recording['file_path'], recordings_directory)
+            recording['file_url'] = f"/recordings/{rel_path}"
+        
+        if recording.get('thumbnail_path'):
+            rel_path = os.path.relpath(recording['thumbnail_path'], recordings_directory)
+            recording['thumbnail_url'] = f"/recordings/{rel_path}"
+        
+        return recording
+    except Exception as e:
+        logger.error(f"Error retrieving recording {recording_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/alerts")
 async def get_alerts(
@@ -219,40 +232,45 @@ async def get_alerts(
     min_confidence: float = Query(0.5, ge=0, le=1.0)
 ):
     """Get detection alerts from recordings, for event monitoring."""
-    global detector_manager
-    if detector_manager is None:
-        raise HTTPException(status_code=503, detail="Detector manager not initialized")
+    global recordings_api, recordings_directory
     
-    if not detector_manager.recording_manager:
-        raise HTTPException(status_code=404, detail="Recording is not enabled")
+    if recordings_api is None:
+        raise HTTPException(status_code=503, detail="Recording API not initialized")
     
-    alerts = detector_manager.recording_manager.get_alerts(
-        limit=limit,
-        offset=offset,
-        start_date=start_date,
-        end_date=end_date,
-        object_type=object_type,
-        min_confidence=min_confidence
-    )
-    
-    # Format alerts with URLs
-    host_url = str(request.base_url).rstrip('/')
-    for alert in alerts:
-        if alert['thumbnail_path']:
-            thumbnail_filename = os.path.basename(alert['thumbnail_path'])
-            alert['thumbnail_url'] = f"{host_url}/recordings/{thumbnail_filename}"
-    
-    return {
-        "alerts": alerts,
-        "total": detector_manager.recording_manager.get_alerts_count(
-            start_date=start_date, 
+    try:
+        # Get alerts
+        alerts = recordings_api.get_alerts(
+            limit=limit,
+            offset=offset,
+            start_date=start_date,
             end_date=end_date,
             object_type=object_type,
             min_confidence=min_confidence
-        ),
-        "limit": limit,
-        "offset": offset
-    }
+        )
+        
+        # Get total count for pagination
+        total = recordings_api.get_alerts_count(
+            start_date=start_date,
+            end_date=end_date,
+            object_type=object_type,
+            min_confidence=min_confidence
+        )
+        
+        # Transform file paths to URLs
+        for alert in alerts:
+            if alert.get('thumbnail_path'):
+                rel_path = os.path.relpath(alert['thumbnail_path'], recordings_directory)
+                alert['thumbnail_url'] = f"/recordings/{rel_path}"
+        
+        return {
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+            "alerts": alerts
+        }
+    except Exception as e:
+        logger.error(f"Error retrieving alerts: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/stats/objects")
 async def get_object_stats(
@@ -261,15 +279,21 @@ async def get_object_stats(
     stream_id: Optional[str] = None
 ):
     """Get statistics about detected objects over time."""
-    global detector_manager
-    if detector_manager is None:
-        raise HTTPException(status_code=503, detail="Detector manager not initialized")
+    global recordings_api
     
-    if not detector_manager.recording_manager:
-        raise HTTPException(status_code=404, detail="Recording is not enabled")
+    if recordings_api is None:
+        raise HTTPException(status_code=503, detail="Recording API not initialized")
     
-    stats = detector_manager.recording_manager.get_object_stats(start_date, end_date, stream_id)
-    return {"stats": stats}
+    try:
+        stats = recordings_api.get_object_stats(
+            start_date=start_date,
+            end_date=end_date,
+            stream_id=stream_id
+        )
+        return {"stats": stats}
+    except Exception as e:
+        logger.error(f"Error retrieving object statistics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/stats/times")
 async def get_time_stats(
@@ -278,38 +302,48 @@ async def get_time_stats(
     stream_id: Optional[str] = None
 ):
     """Get detection statistics by time of day."""
-    global detector_manager
-    if detector_manager is None:
-        raise HTTPException(status_code=503, detail="Detector manager not initialized")
+    global recordings_api
     
-    if not detector_manager.recording_manager:
-        raise HTTPException(status_code=404, detail="Recording is not enabled")
+    if recordings_api is None:
+        raise HTTPException(status_code=503, detail="Recording API not initialized")
     
-    stats = detector_manager.recording_manager.get_time_stats(object_type, days, stream_id)
-    return {"stats": stats}
+    try:
+        stats = recordings_api.get_time_stats(
+            object_type=object_type,
+            days=days,
+            stream_id=stream_id
+        )
+        return {"stats": stats}
+    except Exception as e:
+        logger.error(f"Error retrieving time statistics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/streams")
 async def get_streams():
     """Get list of all video streams with recording statistics."""
-    global detector_manager
+    global detector_manager, recordings_api
+    
     if detector_manager is None:
         raise HTTPException(status_code=503, detail="Detector manager not initialized")
         
-    streams = []
-    for detector_id, detector in detector_manager.get_all_detectors().items():
-        stream = {
-            "id": detector_id,
-            "name": detector.get_name(),
-            "source": detector._mask_credentials(detector.source_url)
-        }
-        
-        # Add recording stats if recording is enabled
-        if detector_manager.recording_manager:
-            stream["recording_stats"] = detector_manager.recording_manager.get_stream_stats(detector_id)
+    # If recording API isn't available, we can't get stats
+    if recordings_api is None:
+        streams = detector_manager.get_detector_status()
+        for stream in streams.values():
+            stream['recording_stats'] = None
+        return {"streams": list(streams.values())}
+    
+    try:
+        streams = detector_manager.get_detector_status()
+        for stream_id, stream in streams.items():
+            # Get stats for this stream
+            stats = recordings_api.get_stream_stats(stream_id)
+            stream['recording_stats'] = stats
             
-        streams.append(stream)
-        
-    return {"streams": streams}
+        return {"streams": list(streams.values())}
+    except Exception as e:
+        logger.error(f"Error retrieving streams: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/feeds")
 async def get_feeds():
@@ -420,7 +454,7 @@ def start_visualizer(
         enable_recording: Whether to enable recording of detected objects
         recordings_dir: Directory to store recordings
     """
-    global detector_manager
+    global detector_manager, recordings_api
     
     # Initialize the recording manager if enabled
     recording_manager = None
@@ -437,6 +471,10 @@ def start_visualizer(
         # Store the recordings directory for serving files
         global recordings_directory
         recordings_directory = recording_manager.recordings_dir
+        
+        # Initialize the recordings API
+        logger.info("Initializing recordings API")
+        recordings_api = RecordingsAPI(db_path=recording_manager.db_path)
     
     # Initialize the detector manager
     detector_manager = DetectorManager(recording_manager=recording_manager)
@@ -505,4 +543,11 @@ def start_visualizer(
             logger.info("Final cleanup of all detectors...")
             detector_manager.stop_all()
             detector_manager = None
-            logger.info("All API server resources released")
+        
+        # Close the API connection
+        if recordings_api:
+            logger.info("Closing recordings API connection...")
+            recordings_api.close()
+            recordings_api = None
+            
+        logger.info("All API server resources released")

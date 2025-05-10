@@ -14,6 +14,8 @@ There was no easy tool for this—so I built one.
 - [Streamlit Web Interface](#streamlit-web-interface)
 - [Server CLI Usage](#server-cli-usage)
 - [Object Detection with YOLO](#object-detection-with-yolo)
+- [Recording Features](#recording-features)
+- [API Reference](#api-reference)
 - [Manual Configuration](#manual-configuration)
 - [Streaming Setup](#streaming-setup)
 - [Troubleshooting](#troubleshooting)
@@ -290,6 +292,136 @@ python3 video-feed/feed_cli.py detect \
 ```
 
 The modular package structure makes it easy to integrate streaming capabilities into your Python applications without having to run the CLI directly.
+
+## Recording Features
+
+QuickCast includes a powerful recording system that captures video when objects are detected. This feature allows you to maintain a record of detection events for later review.
+
+### Enabling Recording
+
+Start the object detection viewer with recording enabled:
+
+```bash
+python3 video-feed/feed_cli.py detect \
+  --path video/iphone-1 \
+  --enable-recording \
+  --pre-detection-buffer 5 \
+  --post-detection-buffer 10
+```
+
+### Key Recording Features
+
+- **Pre-Detection Buffer**: Captures video from before an object was detected (default: 5 seconds)
+- **Post-Detection Buffer**: Continues recording after the last detection (default: 5 seconds)
+- **Automatic Storage Management**: Older recordings are automatically deleted when space is limited
+- **Detection Metadata**: Each recording stores metadata about detected objects, timestamps, and confidence levels
+
+### Recording CLI Options
+
+```bash
+# Basic recording setup
+python3 video-feed/feed_cli.py detect --path video/iphone-1 --enable-recording
+
+# Customize buffer durations
+python3 video-feed/feed_cli.py detect \
+  --path video/iphone-1 \
+  --enable-recording \
+  --pre-detection-buffer 3 \
+  --post-detection-buffer 15 \
+  --min-confidence 0.5
+
+# Specify custom recording directory
+python3 video-feed/feed_cli.py detect \
+  --path video/iphone-1 \
+  --enable-recording \
+  --recordings-dir /path/to/recordings
+```
+
+## API Reference
+
+QuickCast provides a comprehensive REST API for interacting with the recording system. This API allows you to query recordings, retrieve detection events, and perform data analysis.
+
+### API Endpoints
+
+#### Recordings Management
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/recordings` | GET | List recordings with filtering and pagination |
+| `/api/recordings/{id}` | GET | Get detailed information about a specific recording |
+| `/api/recordings/{id}` | DELETE | Delete a recording and associated files |
+
+#### Alerts and Statistics
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/alerts` | GET | Get detection alerts with filtering by object type and confidence |
+| `/api/stats/objects` | GET | Get statistics about detected object types over time |
+| `/api/stats/times` | GET | Get detection statistics by time of day/week |
+| `/api/streams` | GET | List all video streams with recording statistics |
+
+### Using the API
+
+#### Example: Listing Recordings
+
+```bash
+# Retrieve all recordings
+curl http://localhost:8000/api/recordings
+
+# Filter by date range and object type
+curl "http://localhost:8000/api/recordings?start_date=2025-01-01&object_type=person&min_confidence=0.7"
+
+# Pagination
+curl "http://localhost:8000/api/recordings?limit=10&offset=20&sort_by=timestamp&sort_order=desc"
+```
+
+#### Example: Get Alerts
+
+```bash
+# Get recent detection alerts
+curl "http://localhost:8000/api/alerts?min_confidence=0.8"
+
+# Filter alerts by object type
+curl "http://localhost:8000/api/alerts?object_type=car&limit=50"
+```
+
+#### Example: Get Statistics
+
+```bash
+# Get object type statistics
+curl http://localhost:8000/api/stats/objects
+
+# Get temporal detection patterns
+curl "http://localhost:8000/api/stats/times?days=30&object_type=person"
+```
+
+### API Implementation
+
+For developers, you can directly utilize the RecordingsAPI class in your custom applications:
+
+```python
+from videofeed.api import RecordingsAPI
+
+# Initialize the API with database path
+api = RecordingsAPI(db_path="/path/to/recordings.db")
+
+# Get recordings with filtering
+recordings = api.get_recordings(
+    stream_id="camera1",
+    object_type="person",
+    min_confidence=0.7,
+    limit=10,
+    sort_by="timestamp",
+    sort_order="desc"
+)
+
+# Get object detection statistics
+stats = api.get_object_stats(start_date="2025-01-01")
+print(f"Object detection breakdown: {stats['object_percentages']}")
+
+# Close the connection when done
+api.close()
+```
 
 ## Manual Configuration
 
