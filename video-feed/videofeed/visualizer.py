@@ -9,6 +9,7 @@ from fastapi import FastAPI, HTTPException, Request, Query
 from fastapi.responses import StreamingResponse, HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 from videofeed.detector import DetectorManager
@@ -20,6 +21,15 @@ logger = logging.getLogger('video-visualizer')
 
 # Create FastAPI app
 app = FastAPI(title="Video Feed Visualizer")
+
+# Configure CORS middleware to allow cross-origin requests
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins - replace with specific origins in production
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all methods
+    allow_headers=["*"],  # Allow all headers
+)
 
 # Create templates directory and simple viewer
 TEMPLATES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
