@@ -10,14 +10,18 @@ import threading
 import time
 from typing import Dict, List, Optional, Set
 
-from fastapi import FastAPI, HTTPException, Request, Query, Body
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi import FastAPI, HTTPException, Request, Query, Body, File, UploadFile
+from fastapi.responses import StreamingResponse, JSONResponse, FileResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 import uvicorn
+import os
 
 from videofeed.detector import DetectorManager
 from videofeed.credentials import get_credentials, APP_NAME
+from videofeed.recorder import RecordingManager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
@@ -36,6 +40,10 @@ app.add_middleware(
     allow_headers=["*"],  # Allow all headers
 )
 
+# Configure templates
+templates_path = os.path.join(os.path.dirname(__file__), "templates")
+templates = Jinja2Templates(directory=templates_path)
+
 # Authentication schema for simple credential verification
 class UserCredentials(BaseModel):
     username: str
@@ -43,6 +51,9 @@ class UserCredentials(BaseModel):
 
 # Global detector manager instance
 detector_manager = None
+
+# Directory for recordings is configured at runtime
+recordings_directory = None
 
 
 
@@ -69,6 +80,31 @@ async def video_frame(detector_id: str):
     frame_bytes = detector_manager.get_frame_jpeg(detector_id)
     return StreamingResponse(content=io.BytesIO(frame_bytes), media_type="image/jpeg")
 
+@app.get("/", response_class=HTMLResponse)
+async def index(request: Request):
+    """Render the main viewer page."""
+    return templates.TemplateResponse("viewer.html", {"request": request})
+
+@app.get("/recordings.html", response_class=HTMLResponse)
+async def recordings_page(request: Request):
+    """Render the recordings page."""
+    return templates.TemplateResponse("recordings.html", {"request": request})
+
+@app.get("/recordings/{file_path:path}")
+async def serve_recording_file(file_path: str):
+    """Serve a recording file (video or thumbnail)."""
+    global recordings_directory
+    
+    if not recordings_directory:
+        raise HTTPException(status_code=404, detail="Recording directory not configured")
+    
+    file_full_path = os.path.join(recordings_directory, file_path)
+    
+    if not os.path.exists(file_full_path):
+        raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
+    
+    return FileResponse(file_full_path)
+
 @app.get("/status")
 async def get_status(feed: Optional[str] = None):
     """Get the detector status for one or all feeds."""
@@ -77,6 +113,203 @@ async def get_status(feed: Optional[str] = None):
         raise HTTPException(status_code=503, detail="Detector manager not initialized")
     
     return detector_manager.get_detector_status(feed)
+
+@app.get("/api/recordings")
+async def get_recordings(
+    stream_id: Optional[str] = None,
+    limit: int = Query(100, gt=0, le=1000),
+    offset: int = Query(0, ge=0),
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    object_type: Optional[str] = None,
+    min_confidence: Optional[float] = None,
+    sort_by: str = Query("timestamp", regex=r"^(timestamp|confidence|duration)$"),
+    sort_order: str = Query("desc", regex=r"^(asc|desc)$")
+):
+    """Get list of recordings from the database with filtering and sorting options."""
+    global detector_manager
+    if detector_manager is None:
+        raise HTTPException(status_code=503, detail="Detector manager not initialized")
+    
+    if not detector_manager.recording_manager:
+        raise HTTPException(status_code=404, detail="Recording is not enabled")
+    
+    recordings = detector_manager.recording_manager.get_recordings(
+        stream_id=stream_id,
+        limit=limit,
+        offset=offset,
+        start_date=start_date,
+        end_date=end_date,
+        object_type=object_type,
+        min_confidence=min_confidence,
+        sort_by=sort_by,
+        sort_order=sort_order
+    )
+    
+    # Format each recording with proper URLs
+    host_url = str(request.base_url).rstrip('/')
+    for recording in recordings:
+        # Extract just the filename from paths
+        video_filename = os.path.basename(recording['file_path'])
+        thumbnail_filename = os.path.basename(recording['thumbnail_path']) if recording['thumbnail_path'] else None
+        
+        # Add direct URLs for frontend use
+        recording['video_url'] = f"{host_url}/recordings/{video_filename}"
+        recording['thumbnail_url'] = f"{host_url}/recordings/{thumbnail_filename}" if thumbnail_filename else None
+        
+    return {
+        "recordings": recordings,
+        "total": detector_manager.recording_manager.get_recordings_count(
+            stream_id=stream_id, 
+            start_date=start_date, 
+            end_date=end_date,
+            object_type=object_type,
+            min_confidence=min_confidence
+        ),
+        "limit": limit,
+        "offset": offset
+    }
+
+@app.delete("/api/recordings/{recording_id}")
+async def delete_recording(recording_id: int):
+    """Delete a recording by ID."""
+    global detector_manager
+    if detector_manager is None:
+        raise HTTPException(status_code=503, detail="Detector manager not initialized")
+    
+    if not detector_manager.recording_manager:
+        raise HTTPException(status_code=404, detail="Recording is not enabled")
+    
+    success = detector_manager.recording_manager.delete_recording(recording_id)
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Recording {recording_id} not found")
+    
+    return {"success": True, "id": recording_id}
+
+@app.get("/api/recordings/{recording_id}")
+async def get_recording_detail(recording_id: int):
+    """Get detailed information about a specific recording."""
+    global detector_manager
+    if detector_manager is None:
+        raise HTTPException(status_code=503, detail="Detector manager not initialized")
+    
+    if not detector_manager.recording_manager:
+        raise HTTPException(status_code=404, detail="Recording is not enabled")
+    
+    recording = detector_manager.recording_manager.get_recording_by_id(recording_id)
+    if not recording:
+        raise HTTPException(status_code=404, detail=f"Recording {recording_id} not found")
+    
+    # Format with URLs
+    host_url = str(request.base_url).rstrip('/')
+    video_filename = os.path.basename(recording['file_path'])
+    thumbnail_filename = os.path.basename(recording['thumbnail_path']) if recording['thumbnail_path'] else None
+    recording['video_url'] = f"{host_url}/recordings/{video_filename}"
+    recording['thumbnail_url'] = f"{host_url}/recordings/{thumbnail_filename}" if thumbnail_filename else None
+    
+    return recording
+
+@app.get("/api/alerts")
+async def get_alerts(
+    limit: int = Query(100, gt=0, le=1000),
+    offset: int = Query(0, ge=0),
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    object_type: Optional[str] = None,
+    min_confidence: float = Query(0.5, ge=0, le=1.0)
+):
+    """Get detection alerts from recordings, for event monitoring."""
+    global detector_manager
+    if detector_manager is None:
+        raise HTTPException(status_code=503, detail="Detector manager not initialized")
+    
+    if not detector_manager.recording_manager:
+        raise HTTPException(status_code=404, detail="Recording is not enabled")
+    
+    alerts = detector_manager.recording_manager.get_alerts(
+        limit=limit,
+        offset=offset,
+        start_date=start_date,
+        end_date=end_date,
+        object_type=object_type,
+        min_confidence=min_confidence
+    )
+    
+    # Format alerts with URLs
+    host_url = str(request.base_url).rstrip('/')
+    for alert in alerts:
+        if alert['thumbnail_path']:
+            thumbnail_filename = os.path.basename(alert['thumbnail_path'])
+            alert['thumbnail_url'] = f"{host_url}/recordings/{thumbnail_filename}"
+    
+    return {
+        "alerts": alerts,
+        "total": detector_manager.recording_manager.get_alerts_count(
+            start_date=start_date, 
+            end_date=end_date,
+            object_type=object_type,
+            min_confidence=min_confidence
+        ),
+        "limit": limit,
+        "offset": offset
+    }
+
+@app.get("/api/stats/objects")
+async def get_object_stats(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    stream_id: Optional[str] = None
+):
+    """Get statistics about detected objects over time."""
+    global detector_manager
+    if detector_manager is None:
+        raise HTTPException(status_code=503, detail="Detector manager not initialized")
+    
+    if not detector_manager.recording_manager:
+        raise HTTPException(status_code=404, detail="Recording is not enabled")
+    
+    stats = detector_manager.recording_manager.get_object_stats(start_date, end_date, stream_id)
+    return {"stats": stats}
+
+@app.get("/api/stats/times")
+async def get_time_stats(
+    object_type: Optional[str] = None,
+    days: int = Query(7, gt=0, le=90),
+    stream_id: Optional[str] = None
+):
+    """Get detection statistics by time of day."""
+    global detector_manager
+    if detector_manager is None:
+        raise HTTPException(status_code=503, detail="Detector manager not initialized")
+    
+    if not detector_manager.recording_manager:
+        raise HTTPException(status_code=404, detail="Recording is not enabled")
+    
+    stats = detector_manager.recording_manager.get_time_stats(object_type, days, stream_id)
+    return {"stats": stats}
+
+@app.get("/api/streams")
+async def get_streams():
+    """Get list of all video streams with recording statistics."""
+    global detector_manager
+    if detector_manager is None:
+        raise HTTPException(status_code=503, detail="Detector manager not initialized")
+        
+    streams = []
+    for detector_id, detector in detector_manager.get_all_detectors().items():
+        stream = {
+            "id": detector_id,
+            "name": detector.get_name(),
+            "source": detector._mask_credentials(detector.source_url)
+        }
+        
+        # Add recording stats if recording is enabled
+        if detector_manager.recording_manager:
+            stream["recording_stats"] = detector_manager.recording_manager.get_stream_stats(detector_id)
+            
+        streams.append(stream)
+        
+    return {"streams": streams}
 
 @app.get("/feeds")
 async def get_feeds():
@@ -122,8 +355,9 @@ async def shutdown_detector():
     global detector_manager
     logger.info("Server is shutting down, stopping detector...")
     if detector_manager:
+        logger.info("Stopping all detectors...")
         detector_manager.stop_all()
-        detector_manager = None
+        logger.info("All detectors stopped successfully")
     logger.info("Detector stopped successfully")
 
 
@@ -167,7 +401,12 @@ def start_visualizer(
     port: int = 8000,
     model_path: str = "yolov8n.pt",
     confidence: float = 0.4,
-    resolution: tuple = (960, 540)
+    resolution: tuple = (960, 540),
+    enable_recording: bool = False,
+    recordings_dir: Optional[str] = None,
+    min_confidence: float = 0.5,
+    pre_detection_buffer: int = 5,
+    post_detection_buffer: int = 5
 ):
     """Start the API server with object detection for multiple streams.
     
@@ -178,11 +417,29 @@ def start_visualizer(
         model_path: Path to YOLO model or model name
         confidence: Detection confidence threshold
         resolution: Output resolution (width, height)
+        enable_recording: Whether to enable recording of detected objects
+        recordings_dir: Directory to store recordings
     """
     global detector_manager
     
+    # Initialize the recording manager if enabled
+    recording_manager = None
+    if enable_recording:
+        logger.info("Initializing recording manager")
+        recording_manager = RecordingManager(
+            recordings_dir=recordings_dir,
+            min_confidence=min_confidence,
+            pre_detection_buffer=pre_detection_buffer,
+            post_detection_buffer=post_detection_buffer
+        )
+        recording_manager.start()
+        
+        # Store the recordings directory for serving files
+        global recordings_directory
+        recordings_directory = recording_manager.recordings_dir
+    
     # Initialize the detector manager
-    detector_manager = DetectorManager()
+    detector_manager = DetectorManager(recording_manager=recording_manager)
     logger.info(f"Initializing detection for {len(rtsp_urls)} streams")
     
     # Define our own signal handler for graceful shutdown

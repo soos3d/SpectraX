@@ -13,6 +13,8 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 import uuid
 
+from videofeed.recorder import RecordingManager
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -28,7 +30,8 @@ class RTSPObjectDetector:
         confidence: float = 0.5,
         buffer_size: int = 10,
         reconnect_interval: int = 5,
-        resolution: Tuple[int, int] = (640, 480)
+        resolution: Tuple[int, int] = (640, 480),
+        recording_manager: Optional[RecordingManager] = None
     ):
         """Initialize the RTSP object detector.
         
@@ -62,6 +65,10 @@ class RTSPObjectDetector:
         self.last_fps_update = 0
         self.detections = []
         
+        # Recording
+        self.recording_manager = recording_manager
+        self.detector_id = str(uuid.uuid4())  # Unique ID for this detector instance
+        
     def load_model(self) -> None:
         """Load YOLO model."""
         try:
@@ -89,6 +96,12 @@ class RTSPObjectDetector:
         
         self.capture_thread.start()
         self.processing_thread.start()
+        
+        # Register with recording manager if available
+        if self.recording_manager:
+            stream_name = self.get_name()
+            self.recording_manager.register_stream(self.detector_id, stream_name)
+            
         logger.info("Detector started")
         
     def stop(self) -> None:
@@ -97,6 +110,10 @@ class RTSPObjectDetector:
         
         # Signal threads to stop
         self.running = False
+        
+        # Unregister from recording manager if available
+        if self.recording_manager:
+            self.recording_manager.unregister_stream(self.detector_id)
         
         # Clear the buffer to unblock any waiting threads
         try:
@@ -197,6 +214,10 @@ class RTSPObjectDetector:
                 self.last_fps_update = current_time
             self.frame_count += 1
             
+            # Send frame to recording manager buffer if available
+            if self.recording_manager and frame is not None:
+                self.recording_manager.add_frame(self.detector_id, frame.copy())
+            
             # Add to buffer, drop frames if buffer is full
             try:
                 self.frame_buffer.put(frame, block=False)
@@ -228,10 +249,10 @@ class RTSPObjectDetector:
                 logger.error(f"Error processing frame: {e}")
                 time.sleep(0.1)
                 
-    def _process_results(self, frame: np.ndarray, results) -> Tuple[np.ndarray, List[Dict]]:
+    def _process_results(self, frame: np.ndarray, results):
         """Process YOLO results and draw on frame."""
         detections = []
-        processed_frame = frame.copy()
+        max_conf = 0
         
         # Extract the first result (only one image processed at a time)
         result = results[0]
@@ -247,29 +268,43 @@ class RTSPObjectDetector:
             cls = int(box.cls[0])
             name = result.names[cls]
             
-            # Add to detections list
-            detections.append({
+            # Track highest confidence
+            if conf > max_conf:
+                max_conf = conf
+            
+            # Save detection info
+            detection = {
                 "class": name,
                 "confidence": conf,
                 "bbox": [x1, y1, x2, y2]
-            })
+            }
+            detections.append(detection)
             
             # Draw on frame
-            cv2.rectangle(processed_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
             
             # Draw label
             label = f"{name} {conf:.2f}"
             (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-            cv2.rectangle(processed_frame, (x1, y1 - 20), (x1 + w, y1), (0, 255, 0), -1)
-            cv2.putText(processed_frame, label, (x1, y1 - 5), 
+            cv2.rectangle(frame, (x1, y1 - 20), (x1 + w, y1), (0, 255, 0), -1)
+            cv2.putText(frame, label, (x1, y1 - 5), 
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
         
         # Draw FPS
         fps_text = f"FPS: {self.fps}"
-        cv2.putText(processed_frame, fps_text, (10, 30), 
+        cv2.putText(frame, fps_text, (10, 30), 
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
         
-        return processed_frame, detections
+        # Trigger recording if we have detections and a recording manager
+        if detections and self.recording_manager and max_conf > 0:
+            self.recording_manager.handle_detection(
+                self.detector_id, 
+                detections, 
+                max_conf, 
+                frame.copy()
+            )
+        
+        return frame, detections
         
     def get_frame_jpeg(self) -> bytes:
         """Get the latest processed frame as JPEG bytes."""
@@ -306,11 +341,12 @@ class RTSPObjectDetector:
 class DetectorManager:
     """Manage multiple object detectors."""
     
-    def __init__(self):
+    def __init__(self, recording_manager: Optional[RecordingManager] = None):
         """Initialize the detector manager."""
         self.detectors = {}
         self.default_detector_id = None
         self.model_cache = {}
+        self.recording_manager = recording_manager
         # Use a thread pool for sharing across detectors
         self.executor = ThreadPoolExecutor(max_workers=3)
         self._lock = threading.RLock()
@@ -319,7 +355,8 @@ class DetectorManager:
                     source_url: str, 
                     model_path: str = "yolov8n.pt",
                     confidence: float = 0.5, 
-                    resolution: Tuple[int, int] = (640, 480)) -> str:
+                    resolution: Tuple[int, int] = (640, 480),
+                    enable_recording: bool = True) -> str:
         """Add a new detector for a stream.
         
         Args:
@@ -344,7 +381,8 @@ class DetectorManager:
                 source_url=source_url,
                 model_path=model_path,
                 confidence=confidence,
-                resolution=resolution
+                resolution=resolution,
+                recording_manager=self.recording_manager if enable_recording else None
             )
             
             # Set model directly if already loaded
@@ -460,6 +498,11 @@ class DetectorManager:
         
         # Shutdown thread pool
         self.executor.shutdown(wait=True)
+        
+        # Stop recording manager if available
+        if self.recording_manager:
+            self.recording_manager.stop()
+            
         logger.info("All detectors stopped")
     
     def __del__(self):

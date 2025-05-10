@@ -144,7 +144,12 @@ def detect(
     model: str = typer.Option("yolov8n.pt", "--model", "-m", help="YOLO model to use"),
     confidence: float = typer.Option(0.4, "--confidence", "-c", help="Detection confidence threshold"),
     width: int = typer.Option(960, "--width", help="Output video width"),
-    height: int = typer.Option(540, "--height", help="Output video height")
+    height: int = typer.Option(540, "--height", help="Output video height"),
+    recording: bool = typer.Option(False, "--record", help="Enable recording of detected objects"),
+    recordings_dir: Optional[Path] = typer.Option(None, "--recordings-dir", help="Directory to store recordings (default: ~/video-feed-recordings)"),
+    min_confidence: float = typer.Option(0.5, "--min-record-confidence", help="Minimum confidence to trigger recording"),
+    pre_buffer: int = typer.Option(5, "--pre-buffer", help="Seconds of video to keep before detection"),
+    post_buffer: int = typer.Option(5, "--post-buffer", help="Seconds of video to keep after last detection")
 ) -> None:
     """Start object detection visualizer with multiple RTSP streams."""
     # Check if either rtsp_urls or paths are provided
@@ -195,8 +200,23 @@ def detect(
             port=port,
             model_path=model,
             confidence=confidence,
-            resolution=resolution
+            resolution=resolution,
+            enable_recording=recording,
+            recordings_dir=str(recordings_dir) if recordings_dir else None,
+            min_confidence=min_confidence,
+            pre_detection_buffer=pre_buffer,
+            post_detection_buffer=post_buffer
         )
+        
+        # Display recording info if enabled
+        if recording:
+            recordings_path = recordings_dir or Path.home() / "video-feed-recordings"
+            typer.secho(f"\n📹 Recording enabled - video clips will be saved when objects are detected", fg=typer.colors.GREEN)
+            typer.secho(f"   📂 Recordings directory: {recordings_path}", fg=typer.colors.BLUE)
+            typer.secho(f"   🎯 Minimum recording confidence: {min_confidence}", fg=typer.colors.BLUE)
+            typer.secho(f"   ⏪ Pre-detection buffer: {pre_buffer} seconds", fg=typer.colors.BLUE)
+            typer.secho(f"   ⏩ Post-detection buffer: {post_buffer} seconds", fg=typer.colors.BLUE)
+            typer.secho(f"   🌐 Recordings API: http://{host}:{port}/recordings", fg=typer.colors.BLUE)
     except KeyboardInterrupt:
         # Let the visualizer handle cleanup, then exit normally
         typer.secho("\nExiting...", fg=typer.colors.YELLOW)
