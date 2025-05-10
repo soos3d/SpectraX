@@ -6,6 +6,18 @@ There was no easy tool for this—so I built one.
 
 > ⚠️ Early stage: QuickCast is under active development and may contain bugs. It currently uses a self-signed certificate for RTSPS, which can trigger security warnings in some clients. For production use, replace it with a certificate from a trusted CA.
 
+## Table of Contents
+
+- [What It Does](#what-it-does)
+- [Prerequisites](#prerequisites)
+- [Quickstart](#quickstart)
+- [Streamlit Web Interface](#streamlit-web-interface)
+- [Server CLI Usage](#server-cli-usage)
+- [Object Detection with YOLO](#object-detection-with-yolo)
+- [Manual Configuration](#manual-configuration)
+- [Streaming Setup](#streaming-setup)
+- [Troubleshooting](#troubleshooting)
+
 ## What It Does
 
 QuickCast wraps [MediaMTX](https://github.com/bluenviron/mediamtx), a powerful RTSP/HLS server, with:
@@ -15,17 +27,18 @@ QuickCast wraps [MediaMTX](https://github.com/bluenviron/mediamtx), a powerful R
 - Configuration file support - use a custom config file to manage credentials and paths if you want
 - Multiple streaming outputs — RTSP (low latency), RTSPS (encrypted), and HLS (browser-compatible)
 - Mobile-ready — plug-and-play with Larix Broadcaster or other RTSP clients for phone-based streaming
+- YOLO Object Detection — process video streams with real-time object detection
 
 ### Usage Options
 
 - **Python Package**: For integrating streaming into your own Python projects
 → Found in `video-feed/videofeed/`
-- **CLI-Only Tool**: Standalone script for quick use
+- **CLI-Only Tool**: Standalone script for quick use (limited features)
 → Found in `cli-only/`
-- **Streamlit UI**: Web-based interface for easy stream management
-→ Found in `basic-ui/streamlit_ui.py`
+- **Object Detection**: Process video feeds with YOLO object detection
+→ Found in `video-feed/videofeed/detector.py`
 
-All instructions in this `README` use the Python package version, it works the same way as the CLI-only script.
+All instructions in this `README` use the Python package version.
 
 ## Prerequisites
 
@@ -172,15 +185,6 @@ QuickCast includes a basic web-based interface built with Streamlit for easy tes
 
 4. Use the Advanced Settings to configure buffer length and reconnection behavior for optimal playback
 
-### Managing Credentials
-
-Credentials are securely stored in your system's keychain:
-
-```bash
-# Reset stored publisher/viewer credentials
-python3 video-feed/feed_cli.py reset-creds
-```
-
 ## Server CLI Usage
 
 Use the `--help` flag to list available commands and options:
@@ -242,6 +246,47 @@ paths = ["video/camera1"]
 config = create_config(host_ip, paths, creds)
 
 # Use other functionality as needed
+```
+
+## Object Detection with YOLO
+
+QuickCast now includes real-time object detection capabilities using the [YOLO (You Only Look Once) model from Ultralytics](https://github.com/ultralytics/ultralytics). This feature allows you to process video streams and detect objects in real-time.
+
+### Running Object Detection
+
+Start object detection on a single RTSP stream:
+
+```bash
+python3 video-feed/feed_cli.py detect --path video/iphone-1
+```
+
+Customize the detection parameters:
+
+```bash
+python3 video-feed/feed_cli.py detect \
+  --path video/iphone-1 \
+  --host 0.0.0.0 --port 8080 \
+  --model yolov8n.pt --confidence 0.45 \
+  --width 1280 --height 720
+```
+
+### Multi-feed Object Detection
+
+Process and view multiple camera feeds simultaneously:
+
+```bash
+# Process multiple paths from your MediaMTX server
+python3 video-feed/feed_cli.py detect --path video/iphone-1 --path video/ipad-1
+
+# Or directly specify RTSP URLs
+python3 video-feed/feed_cli.py detect \
+  --rtsp-url "rtsps://viewer:password@192.168.0.11:8322/video/iphone-1" \
+  --rtsp-url "rtsps://viewer:password@192.168.0.11:8322/video/ipad-1"
+
+# Mix and match paths and URLs
+python3 video-feed/feed_cli.py detect \
+  --path video/iphone-1 \
+  --rtsp-url "rtsps://viewer:password@other-camera:8322/camera1"
 ```
 
 The modular package structure makes it easy to integrate streaming capabilities into your Python applications without having to run the CLI directly.
@@ -361,8 +406,10 @@ authInternalUsers:
 
 - **Authentication errors**: Ensure you're using the correct credentials shown in the terminal
 - **No connection**: Make sure your device and streaming server are on the same network
-- **Port issues**: Default RTSP port is 8554, HLS on 8888
+- **Port issues**: Default RTSP port is 8554, HLS on 8888, visualizer on 8000
 - **"No stream available"**: The publisher hasn't connected or started streaming yet
+- **Detector not starting**: Make sure you have installed `ultralytics`, `fastapi`, and `uvicorn`
+- **Multiple feeds not showing**: Verify all streams are active before starting the detector
 
 ### Network Setup
 
