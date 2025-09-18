@@ -39,7 +39,7 @@ case "$1" in
     config)
         echo "📋 Starting with configuration file..."
         cd "$PROJECT_ROOT"
-        python3 start_surveillance.py
+        python3 -m videofeed.surveillance config
         ;;
     custom)
         echo "⚙️  Custom mode - specify your options:"
@@ -61,6 +61,6 @@ case "$1" in
         echo ""
         echo "Default: Starting with configuration file..."
         cd "$PROJECT_ROOT"
-        python3 start_surveillance.py
+        python3 -m videofeed.surveillance config
         ;;
 esac

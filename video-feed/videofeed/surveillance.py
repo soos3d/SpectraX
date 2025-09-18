@@ -274,9 +274,49 @@ class SurveillanceSystem:
 
 
 @app.command()
+def config(
+    config_file: Path = typer.Option("surveillance.yml", "--config", "-c", help="Configuration file path")
+):
+    """Start surveillance system using a configuration file."""
+    
+    # Load configuration from YAML
+    if not config_file.exists():
+        typer.secho(f"Configuration file not found: {config_file}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+    
+    try:
+        config_data = yaml.safe_load(config_file.read_text())
+    except Exception as e:
+        typer.secho(f"Error loading configuration: {e}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+    
+    # Extract configuration values
+    cameras = config_data.get('cameras', ['video/camera-1'])
+    network = config_data.get('network', {})
+    detection = config_data.get('detection', {})
+    security = config_data.get('security', {})
+    
+    # Call start with configuration values
+    start(
+        paths=cameras,
+        bind=network.get('bind', '0.0.0.0'),
+        config=None,  # Don't pass a config file since we're using direct values
+        detector=detection.get('enabled', True),
+        detector_port=detection.get('port', 8080),
+        model=detection.get('model', 'yolov8n.pt'),
+        confidence=detection.get('confidence', 0.4),
+        width=detection.get('resolution', {}).get('width', 960),
+        height=detection.get('resolution', {}).get('height', 540),
+        api_port=network.get('api_port', 3333),
+        tls_key=Path(security['tls_key']) if security.get('tls_key') else None,
+        tls_cert=Path(security['tls_cert']) if security.get('tls_cert') else None,
+    )
+
+
+@app.command()
 def start(
     paths: List[str] = typer.Option(
-        ["video/front-door", "video/backyard", "video/garage"],
+        [],
         "--path", "-p",
         help="Camera stream paths"
     ),
@@ -293,6 +333,10 @@ def start(
     tls_cert: Optional[Path] = typer.Option(None, help="TLS certificate path"),
 ):
     """Start the unified surveillance system with streaming and object detection."""
+    
+    # Use default paths if none provided
+    if not paths:
+        paths = ["video/camera-1"]
     
     system = SurveillanceSystem()
     
