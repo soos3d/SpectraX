@@ -15,15 +15,19 @@ logger = logging.getLogger('video-recorder-api')
 class RecordingsAPI:
     """API for accessing and managing surveillance recordings database."""
     
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str = None, db_connection=None):
         """Initialize the API with database connection.
         
         Args:
-            db_path: Path to SQLite database file
+            db_path: Path to SQLite database file (if creating new connection)
+            db_connection: Existing database connection to reuse
         """
         self.db_path = db_path
-        self.db_conn = None
-        self._init_connection()
+        self.db_conn = db_connection
+        self._owns_connection = db_connection is None
+        
+        if self._owns_connection and db_path:
+            self._init_connection()
         
     def _init_connection(self):
         """Initialize database connection."""
@@ -36,7 +40,7 @@ class RecordingsAPI:
     
     def close(self):
         """Close database connection."""
-        if self.db_conn:
+        if self.db_conn and self._owns_connection:
             self.db_conn.close()
             self.db_conn = None
             

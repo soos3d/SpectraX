@@ -3,8 +3,10 @@
 import os
 import yaml
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 import typer
+
+from .constants import DEFAULT_PATHS
 
 
 def create_config(
@@ -98,3 +100,122 @@ def load_config_paths(config_path: Path) -> List[str]:
     except Exception as e:
         typer.secho(f"Failed to load paths: {e}", fg=typer.colors.RED)
         raise typer.Exit(1)
+
+
+class SurveillanceConfig:
+    """Unified configuration management for surveillance system."""
+    
+    def __init__(self, config_file: Optional[Path] = None):
+        """Initialize configuration.
+        
+        Args:
+            config_file: Path to YAML configuration file
+        """
+        self.config_file = config_file
+        self.config_data = {}
+        
+        if config_file and config_file.exists():
+            self.load_from_file(config_file)
+        else:
+            self.load_defaults()
+    
+    def load_from_file(self, config_file: Path):
+        """Load configuration from YAML file.
+        
+        Args:
+            config_file: Path to YAML configuration file
+        """
+        try:
+            with open(config_file, 'r') as f:
+                self.config_data = yaml.safe_load(f) or {}
+        except Exception as e:
+            typer.secho(f"Error loading configuration: {e}", fg=typer.colors.RED)
+            raise typer.Exit(1)
+    
+    def load_defaults(self):
+        """Load default configuration values."""
+        self.config_data = {
+            'cameras': DEFAULT_PATHS,
+            'network': {
+                'bind': '0.0.0.0',
+                'api_port': 3333
+            },
+            'detection': {
+                'enabled': True,
+                'port': 8080,
+                'model': 'yolov8n.pt',
+                'confidence': 0.4,
+                'resolution': {
+                    'width': 960,
+                    'height': 540
+                }
+            },
+            'security': {
+                'use_tls': True,
+                'tls_key': '',
+                'tls_cert': ''
+            }
+        }
+    
+    def get_cameras(self) -> List[str]:
+        """Get camera stream paths."""
+        return self.config_data.get('cameras', DEFAULT_PATHS)
+    
+    def get_network_config(self) -> Dict[str, Any]:
+        """Get network configuration."""
+        return self.config_data.get('network', {})
+    
+    def get_detection_config(self) -> Dict[str, Any]:
+        """Get detection configuration."""
+        return self.config_data.get('detection', {})
+    
+    def get_security_config(self) -> Dict[str, Any]:
+        """Get security configuration."""
+        return self.config_data.get('security', {})
+    
+    def get_bind_address(self) -> str:
+        """Get bind address."""
+        return self.get_network_config().get('bind', '0.0.0.0')
+    
+    def get_api_port(self) -> int:
+        """Get API port."""
+        return self.get_network_config().get('api_port', 3333)
+    
+    def is_detection_enabled(self) -> bool:
+        """Check if detection is enabled."""
+        return self.get_detection_config().get('enabled', True)
+    
+    def get_detection_port(self) -> int:
+        """Get detection port."""
+        return self.get_detection_config().get('port', 8080)
+    
+    def get_detection_model(self) -> str:
+        """Get detection model."""
+        return self.get_detection_config().get('model', 'yolov8n.pt')
+    
+    def get_detection_confidence(self) -> float:
+        """Get detection confidence."""
+        return self.get_detection_config().get('confidence', 0.4)
+    
+    def get_detection_resolution(self) -> tuple:
+        """Get detection resolution."""
+        res = self.get_detection_config().get('resolution', {})
+        return (res.get('width', 960), res.get('height', 540))
+    
+    def get_tls_config(self) -> tuple:
+        """Get TLS configuration.
+        
+        Returns:
+            Tuple of (tls_key_path, tls_cert_path) or (None, None)
+        """
+        security = self.get_security_config()
+        if not security.get('use_tls', False):
+            return None, None
+            
+        tls_key = security.get('tls_key', '')
+        tls_cert = security.get('tls_cert', '')
+        
+        if tls_key and tls_cert:
+            return Path(tls_key), Path(tls_cert)
+        
+        return None, None

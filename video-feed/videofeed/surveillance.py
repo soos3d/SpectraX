@@ -20,10 +20,11 @@ if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
 # Now import from videofeed
-from videofeed.credentials import get_credentials, load_config_credentials
-from videofeed.config import write_cfg, load_config_paths
-from videofeed.utils import detect_host_ip, check_mediamtx_installed, launch_mediamtx
+from videofeed.credentials import get_credentials, load_config_credentials, reset_creds
+from videofeed.config import write_cfg, load_config_paths, SurveillanceConfig
+from videofeed.utils import detect_host_ip, check_mediamtx_installed, launch_mediamtx, print_urls
 from videofeed.visualizer import start_visualizer
+from videofeed.constants import DEFAULT_PATHS
 
 app = typer.Typer(add_completion=False)
 
@@ -278,37 +279,26 @@ def config(
 ):
     """Start surveillance system using a configuration file."""
     
-    # Load configuration from YAML
-    if not config_file.exists():
-        typer.secho(f"Configuration file not found: {config_file}", fg=typer.colors.RED)
-        raise typer.Exit(1)
+    # Load configuration using unified config manager
+    config = SurveillanceConfig(config_file)
     
-    try:
-        config_data = yaml.safe_load(config_file.read_text())
-    except Exception as e:
-        typer.secho(f"Error loading configuration: {e}", fg=typer.colors.RED)
-        raise typer.Exit(1)
-    
-    # Extract configuration values
-    cameras = config_data.get('cameras', ['video/camera-1'])
-    network = config_data.get('network', {})
-    detection = config_data.get('detection', {})
-    security = config_data.get('security', {})
+    # Get TLS configuration
+    tls_key, tls_cert = config.get_tls_config()
     
     # Call start with configuration values
     start(
-        paths=cameras,
-        bind=network.get('bind', '0.0.0.0'),
+        paths=config.get_cameras(),
+        bind=config.get_bind_address(),
         config=None,  # Don't pass a config file since we're using direct values
-        detector=detection.get('enabled', True),
-        detector_port=detection.get('port', 8080),
-        model=detection.get('model', 'yolov8n.pt'),
-        confidence=detection.get('confidence', 0.4),
-        width=detection.get('resolution', {}).get('width', 960),
-        height=detection.get('resolution', {}).get('height', 540),
-        api_port=network.get('api_port', 3333),
-        tls_key=Path(security['tls_key']) if security.get('tls_key') else None,
-        tls_cert=Path(security['tls_cert']) if security.get('tls_cert') else None,
+        detector=config.is_detection_enabled(),
+        detector_port=config.get_detection_port(),
+        model=config.get_detection_model(),
+        confidence=config.get_detection_confidence(),
+        width=config.get_detection_resolution()[0],
+        height=config.get_detection_resolution()[1],
+        api_port=config.get_api_port(),
+        tls_key=tls_key,
+        tls_cert=tls_cert,
     )
 
 
@@ -394,6 +384,205 @@ def quick(
         detector_port=8080,
         api_port=3333
     )
+
+
+@app.command()
+def run(
+    paths: List[str] = typer.Option(DEFAULT_PATHS, "--path", "-p", help="Logical RTSP path(s) to publish/view. Can be specified multiple times."),
+    bind: str = typer.Option("0.0.0.0", help="Bind IP (default), listens on all interfaces (LAN + localhost); use 127.0.0.1 to restrict to local only."),
+    config: Optional[Path] = typer.Option(None, "--config", "-c", help="Path to pre-made mediamtx.yml"),
+    tls_key: Optional[Path] = typer.Option(None, help="Path to TLS private key for RTSPS."),
+    tls_cert: Optional[Path] = typer.Option(None, help="Path to TLS certificate for RTSPS."),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show server configuration details."),
+    api_port: Optional[int] = typer.Option(None, "--api-port", "-a", help="Port for JSON status API."),
+) -> None:
+    """Start RTSP/HLS micro-server and display connection info (no object detection)."""
+    check_mediamtx_installed("mediamtx")
+
+    # Use default TLS paths if not provided
+    default_tls_key = Path(__file__).parent.parent / "server.key"
+    default_tls_cert = Path(__file__).parent.parent / "server.crt"
+
+    if not tls_key and default_tls_key.exists():
+        tls_key = default_tls_key
+    if not tls_cert and default_tls_cert.exists():
+        tls_cert = default_tls_cert
+
+    tls_key_path = None
+    tls_cert_path = None
+    use_rtsps = False
+
+    # Validate TLS files
+    if tls_key and tls_cert:
+        if not tls_key.exists():
+            typer.secho(f"TLS key not found: {tls_key}", fg=typer.colors.RED)
+            raise typer.Exit(1)
+        if not tls_cert.exists():
+            typer.secho(f"TLS cert not found: {tls_cert}", fg=typer.colors.RED)
+            raise typer.Exit(1)
+        tls_key_path = str(tls_key)
+        tls_cert_path = str(tls_cert)
+        use_rtsps = True
+    elif tls_key or tls_cert:
+        typer.secho("Error: both --tls-key and --tls-cert must be provided for RTSPS.", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+    # Configuration context
+    if config:
+        cfg_path = config
+        creds = load_config_credentials(cfg_path)
+        config_paths = load_config_paths(cfg_path)
+        temp_context = contextlib.nullcontext()
+    else:
+        import tempfile
+        import contextlib
+        temp_context = tempfile.TemporaryDirectory(prefix="video-feed-")
+
+    with temp_context as tmpdir:
+        if not config:
+            cfg_path = Path(tmpdir) / "mediamtx.yml"
+            creds = get_credentials()
+            write_cfg(cfg_path, bind, paths, creds, tls_key=tls_key_path, tls_cert=tls_cert_path)
+            config_paths = paths
+
+        if verbose:
+            typer.secho("MediaMTX Configuration:", fg=typer.colors.BRIGHT_BLUE, bold=True)
+            typer.secho(f"Config file: {cfg_path}", fg=typer.colors.BLUE)
+            typer.echo(cfg_path.read_text())
+
+        server = launch_mediamtx(cfg_path)
+        typer.echo("⏳ Starting MediaMTX ...")
+        try:
+            server.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            pass  # Expected: server is running
+
+        host_ip = detect_host_ip()
+        print_urls(host_ip, config_paths, creds, rtsps=use_rtsps)
+
+        # JSON status API endpoint
+        if api_port:
+            class StatusHandler(BaseHTTPRequestHandler):
+                def do_GET(self):
+                    if self.path == "/paths":
+                        data = {"count": len(config_paths), "paths": config_paths}
+                        resp = json.dumps(data)
+                        self.send_response(200)
+                        self.send_header("Content-Type", "application/json")
+                        self.send_header("Access-Control-Allow-Origin", "*")
+                        self.end_headers()
+                        self.wfile.write(resp.encode())
+                    else:
+                        self.send_response(404)
+                        self.end_headers()
+            api_server = HTTPServer(("0.0.0.0", api_port), StatusHandler)
+
+            threading.Thread(target=api_server.serve_forever, daemon=True).start()
+            typer.echo(f"\n 🔍 Paths API: Use this URL in the UI to auto-detect available paths \n")
+            typer.echo(f"🖥️ If your UI is running on the same device as this server: http://127.0.0.1:{api_port}/paths")
+            typer.echo(f"🌐 If your UI is running on a different device: http://{host_ip}:{api_port}/paths")
+
+        typer.secho("Press Ctrl+C to quit.\n", fg=typer.colors.BRIGHT_BLACK)
+        try:
+            signal.pause()
+        except KeyboardInterrupt:
+            typer.echo("\nShutting down ...")
+            server.terminate()
+            server.wait()
+
+
+@app.command()
+def reset():
+    """Clear stored publisher/viewer credentials."""
+    reset_creds()
+    typer.echo("🔑 Credentials reset; regenerated on next run.")
+
+
+@app.command()
+def detect(
+    rtsp_urls: List[str] = typer.Option([], "--rtsp-url", "-r", help="RTSP URL with credentials (can be specified multiple times)"),
+    paths: List[str] = typer.Option([], "--path", "-p", help="Logical RTSP path to view (can be specified multiple times)"),
+    host: str = typer.Option("127.0.0.1", "--host", "--host-ip", help="Host to bind the visualization server"),
+    port: int = typer.Option(8000, "--port", help="Port to bind the visualization server"),
+    model: str = typer.Option("yolov8n.pt", "--model", "-m", help="YOLO model to use"),
+    confidence: float = typer.Option(0.4, "--confidence", "-c", help="Detection confidence threshold"),
+    width: int = typer.Option(960, "--width", help="Output video width"),
+    height: int = typer.Option(540, "--height", help="Output video height"),
+    recording: bool = typer.Option(False, "--record", help="Enable recording of detected objects"),
+    recordings_dir: Optional[Path] = typer.Option(None, "--recordings-dir", help="Directory to store recordings (default: ~/video-feed-recordings)"),
+    min_confidence: float = typer.Option(0.5, "--min-record-confidence", help="Minimum confidence to trigger recording"),
+    pre_buffer: int = typer.Option(5, "--pre-buffer", help="Seconds of video to keep before detection"),
+    post_buffer: int = typer.Option(5, "--post-buffer", help="Seconds of video to keep after last detection")
+) -> None:
+    """Start object detection visualizer with multiple RTSP streams."""
+    # Check if either rtsp_urls or paths are provided
+    if not rtsp_urls and not paths:
+        typer.secho("Error: Either --rtsp-url or --path must be provided at least once.", fg=typer.colors.RED)
+        raise typer.Exit(1)
+    
+    # Get credentials for paths
+    if paths:
+        creds = get_credentials()
+        # Detect host IP
+        host_ip = detect_host_ip()
+        
+    # Collect all URLs to process
+    all_urls = list(rtsp_urls)  # Start with explicit URLs
+    
+    # For each path, construct the RTSPS URL with credentials
+    for path in paths:
+        # Construct RTSPS URL (encrypted)
+        path_url = f"rtsps://{creds['read_user']}:{creds['read_pass']}@{host_ip}:8322/{path}"
+        all_urls.append(path_url)
+        typer.echo(f"Added RTSPS URL for path '{path}': {path_url.split('@')[0]}@***/{path}")
+    
+    # Define the resolution
+    resolution = (width, height)
+    
+    try:
+        # Start the visualizer
+        typer.secho(f"Starting object detection visualizer at http://{host}:{port}", fg=typer.colors.GREEN)
+        typer.secho(f"Using model: {model} with confidence: {confidence}", fg=typer.colors.BLUE)
+        typer.secho(f"Processing {len(all_urls)} streams", fg=typer.colors.YELLOW)
+        
+        # Log each stream being processed (with masked credentials)
+        for i, url in enumerate(all_urls):
+            protocol = url.split('://')[0] if '://' in url else 'rtsp'
+            masked = f"{protocol}://***:***@" + (url.split('@')[-1] if '@' in url else url)
+            typer.secho(f"  Stream {i+1}: {masked}", fg=typer.colors.BRIGHT_BLACK)
+            
+        typer.secho("Press Ctrl+C once to exit cleanly.", fg=typer.colors.BRIGHT_BLACK)
+        
+        # Start the visualizer with all URLs
+        start_visualizer(
+            rtsp_urls=all_urls,
+            host=host,
+            port=port,
+            model_path=model,
+            confidence=confidence,
+            resolution=resolution,
+            enable_recording=recording,
+            recordings_dir=str(recordings_dir) if recordings_dir else None,
+            min_confidence=min_confidence,
+            pre_detection_buffer=pre_buffer,
+            post_detection_buffer=post_buffer
+        )
+        
+        # Display recording info if enabled
+        if recording:
+            recordings_path = recordings_dir or Path.home() / "video-feed-recordings"
+            typer.secho(f"\n📹 Recording enabled - video clips will be saved when objects are detected", fg=typer.colors.GREEN)
+            typer.secho(f"   📂 Recordings directory: {recordings_path}", fg=typer.colors.BLUE)
+            typer.secho(f"   🎯 Minimum recording confidence: {min_confidence}", fg=typer.colors.BLUE)
+            typer.secho(f"   ⏪ Pre-detection buffer: {pre_buffer} seconds", fg=typer.colors.BLUE)
+            typer.secho(f"   ⏩ Post-detection buffer: {post_buffer} seconds", fg=typer.colors.BLUE)
+            typer.secho(f"   🌐 Recordings API: http://{host}:{port}/recordings", fg=typer.colors.BLUE)
+    except KeyboardInterrupt:
+        # Let the visualizer handle cleanup, then exit normally
+        typer.secho("\nExiting...", fg=typer.colors.YELLOW)
+    except Exception as e:
+        typer.secho(f"Error: {e}", fg=typer.colors.RED)
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":

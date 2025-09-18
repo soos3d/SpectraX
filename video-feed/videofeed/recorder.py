@@ -559,13 +559,18 @@ class RecordingManager:
         except Exception as e:
             logger.error(f"Error during recordings cleanup: {e}")
             
-    # The following methods have been moved to api.py module:
-    # - get_recordings
-    # - get_recordings_count
-    # - get_recording_by_id
-    # - get_alerts
-    # - get_alerts_count
-    # - get_object_stats
-    # - get_time_stats
-    # - get_stream_stats
-    # - delete_recording
+    def get_database_connection(self):
+        """Get the database connection for external API access.
+        
+        Returns:
+            sqlite3.Connection: The database connection object
+        """
+        return self.db_conn
+        
+    def get_database_path(self) -> str:
+        """Get the database path.
+        
+        Returns:
+            str: Path to the SQLite database file
+        """
+        return self.db_path

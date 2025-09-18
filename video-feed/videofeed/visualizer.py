@@ -482,9 +482,9 @@ def start_visualizer(
         global recordings_directory
         recordings_directory = recording_manager.recordings_dir
         
-        # Initialize the recordings API
-        logger.info("Initializing recordings API")
-        recordings_api = RecordingsAPI(db_path=recording_manager.db_path)
+        # Initialize the recordings API with shared database connection
+        logger.info("Initializing recordings API with shared connection")
+        recordings_api = RecordingsAPI(db_connection=recording_manager.get_database_connection())
     
     # Initialize the detector manager
     detector_manager = DetectorManager(recording_manager=recording_manager)
