@@ -49,7 +49,7 @@ case "$1" in
         ;;
     dashboard)
         echo "🌐 Opening surveillance dashboard..."
-        open "$PROJECT_ROOT/dashboard.html"
+        open "$PROJECT_ROOT/basic-ui/dashboard.html"
         ;;
     *)
         echo "Usage: ./surveillance.sh [quick|config|custom|dashboard]"

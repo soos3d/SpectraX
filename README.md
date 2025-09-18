@@ -1,20 +1,17 @@
-# QuickCast — Video Stream Manager & Surveillance System
+# QuickCast — Unified Surveillance System
 
-QuickCast is a lightweight CLI tool for turning any phone or webcam into a secure RTSP/HLS streaming source in seconds. It's built for developers who need a simple, no-fuss way to stream video from a camera to a local machine for processing, testing, or development.
-
-The new streamlined surveillance system makes it even easier to set up and manage multiple cameras with object detection.
+QuickCast is a streamlined surveillance system for turning any phone, tablet, or IP camera into a secure RTSP/HLS streaming source with object detection capabilities. It's built for people who need a simple, powerful wa, and private way to set up a surveillance system or a quick streaming solution.
 
 > ⚠️ Note: QuickCast uses a self-signed certificate for RTSPS by default, which can trigger security warnings in some clients. For production use, replace it with a certificate from a trusted CA.
 
 ## Table of Contents
 
 - [What It Does](#what-it-does)
+- [System Architecture](#system-architecture)
 - [Prerequisites](#prerequisites)
 - [Surveillance System](#surveillance-system)
-- [Quickstart](#quickstart)
 - [Object Detection with YOLO](#object-detection-with-yolo)
 - [Web Dashboard](#web-dashboard)
-- [Manual Configuration](#manual-configuration)
 - [Troubleshooting](#troubleshooting)
 
 ## What It Does
@@ -28,17 +25,47 @@ QuickCast wraps [MediaMTX](https://github.com/bluenviron/mediamtx), a powerful R
 - **Mobile-ready** — Plug-and-play with Larix Broadcaster or other RTSP clients for phone-based streaming
 - **YOLO Object Detection** — Process video streams with real-time object detection
 - **Web Dashboard** — Modern interface to view all cameras in one place
+- **Event-Based Recording** — Record video clips when objects are detected
 
-### Usage Options
+## System Architecture
 
-- **Surveillance System**: Complete solution for multiple cameras with object detection
-  → Found in `video-feed/videofeed/surveillance.py`
-- **Python Package**: For integrating streaming into your own Python projects
-  → Found in `video-feed/videofeed/`
-- **CLI-Only Tool**: Standalone script for quick use (limited features)
-  → Found in `cli-only/`
-- **Web Dashboard**: HTML/JavaScript interface for viewing all cameras
-  → Found in `dashboard.html`
+QuickCast has been streamlined into a clean, modular architecture:
+
+```
+video-feed/
+├── setup.py                    # Package setup
+├── server.crt & server.key     # TLS certificates
+└── videofeed/
+    ├── surveillance.py         # 🎯 MAIN ENTRY POINT - Unified CLI
+    ├── config.py               # 🔧 Configuration management
+    ├── constants.py            # 📋 Shared constants  
+    ├── utils.py                # 🛠️ Utility functions
+    ├── api.py                  # 🔗 Recordings database API
+    ├── recorder.py             # 📹 Event-based recording
+    ├── visualizer.py           # 🌐 Web interface & API
+    ├── detector.py             # 🎯 YOLO object detection
+    ├── credentials.py          # 🔐 Secure credential management
+    ├── cli.py                  # ⚠️ Deprecated (backward compatibility)
+    └── templates/              # 🎨 Web interface templates
+```
+
+### Core Modules
+
+- **`surveillance.py`**: Unified command-line interface with all commands:
+  - `config` - Start with YAML configuration file
+  - `start` - Start with command-line options
+  - `quick` - Quick start with defaults
+  - `run` - Start streaming server only
+  - `detect` - Start object detection only
+  - `reset` - Reset stored credentials
+
+- **`config.py`**: Configuration management with `SurveillanceConfig` class for YAML parsing
+
+- **`detector.py`**: YOLO-based object detection with multi-camera support
+
+- **`recorder.py`**: Event-based recording triggered by object detection
+
+- **`visualizer.py`**: FastAPI web interface with live video and recordings browser
 
 ## Prerequisites
 
@@ -72,11 +99,13 @@ The new streamlined surveillance system makes it easy to manage multiple cameras
 
 ### Quick Start
 
+> The quick start camera path with be `video/camera-1`. You can edit this in `surveillance.py`.
+
 ```bash
 # Start with default settings (1 camera)
 ./surveillance.sh quick
 
-# Start with configuration file
+# Start using config from configuration file (surveillance.yml)
 ./surveillance.sh config
 
 # Open the web dashboard
@@ -119,7 +148,7 @@ detection:
 - **Secure Streaming**: RTSPS encryption with automatic credential management
 - **Object Detection**: Real-time YOLO object detection
 
-## Quickstart
+## Getting Started
 
 Follow these steps to get started with QuickCast:
 
@@ -139,34 +168,41 @@ source venv/bin/activate  # macOS/Linux
 pip install -r requirements.txt
 ```
 
-2. **Basic Usage**
+2. **Using the Surveillance System**
 
 ```bash
-# Start the streaming server (basic mode)
-python3 video-feed/feed_cli.py run
-
-# Start with multiple camera paths
-python3 video-feed/feed_cli.py run --path video/front-door --path video/backyard
-
-# Enable the API for web dashboard
-python3 video-feed/feed_cli.py run --api-port 3333
-```
-
-3. **Object Detection**
-
-```bash
-# Start object detection on a stream
-python3 video-feed/feed_cli.py detect --path video/front-door
-```
-
-4. **Using the Surveillance System**
-
-```bash
-# Quick start with defaults
+# Quick start with defaults (1 camera)
 ./surveillance.sh quick
 
-# Use the configuration file
+# Start with configuration file
 ./surveillance.sh config
+
+# Custom options
+./surveillance.sh custom --path video/front-door --path video/backyard
+```
+
+3. **Advanced Usage**
+
+```bash
+# Start streaming server only (no object detection)
+python -m videofeed.surveillance run --path video/front-door --path video/backyard
+
+# Start object detection only
+python -m videofeed.surveillance detect --path video/front-door
+
+# Reset credentials
+python -m videofeed.surveillance reset
+```
+
+4. **Development Setup**
+
+```bash
+# Install in development mode
+cd video-feed
+pip install -e .
+
+# Run directly from source
+python -m videofeed.surveillance config
 ```
 
 ### Connection Information
@@ -184,40 +220,38 @@ When the server starts, it displays connection information for cameras and viewe
 
 QuickCast includes real-time object detection capabilities using the [YOLO (You Only Look Once) model from Ultralytics](https://github.com/ultralytics/ultralytics). This feature allows you to process video streams and detect objects in real-time.
 
-### Basic Object Detection
+### Object Detection Features
 
-```bash
-# Start object detection on a single stream
-python3 video-feed/feed_cli.py detect --path video/front-door
+- **Real-time Detection**: Process video streams with minimal latency
+- **Multiple Models**: Support for various YOLO models (nano, small, medium, large)
+- **Configurable Confidence**: Set detection thresholds to reduce false positives
+- **Multi-Camera Support**: Process multiple streams simultaneously
+- **Event-Based Recording**: Record video clips when objects are detected
+- **Web Interface**: View detection results in a browser
 
-# Customize detection parameters
-python3 video-feed/feed_cli.py detect \
-  --path video/front-door \
-  --host 0.0.0.0 --port 8080 \
-  --model yolov8n.pt --confidence 0.45 \
-  --width 1280 --height 720
-```
-
-### Multi-feed Object Detection
-
-```bash
-# Process multiple camera feeds
-python3 video-feed/feed_cli.py detect --path video/front-door --path video/backyard
-
-# Use direct RTSP URLs
-python3 video-feed/feed_cli.py detect \
-  --rtsp-url "rtsps://viewer:password@192.168.0.11:8322/video/front-door" \
-  --rtsp-url "rtsps://viewer:password@192.168.0.11:8322/video/backyard"
-```
-
-### Using the Surveillance System
-
-The new surveillance system makes it easier to run object detection:
+### Using Object Detection
 
 ```bash
 # Start surveillance with object detection enabled
 ./surveillance.sh config
+
+# Start object detection only
+python -m videofeed.surveillance detect --path video/front-door --path video/backyard
+
+# Customize detection parameters
+python -m videofeed.surveillance detect \
+  --path video/front-door \
+  --host 0.0.0.0 --port 8080 \
+  --model yolov8n.pt --confidence 0.45 \
+  --width 1280 --height 720
+
+# Use direct RTSP URLs
+python -m videofeed.surveillance detect \
+  --rtsp-url "rtsps://viewer:password@192.168.0.11:8322/video/front-door" \
+  --rtsp-url "rtsps://viewer:password@192.168.0.11:8322/video/backyard"
 ```
+
+### Configuration
 
 You can configure detection settings in `surveillance.yml`:
 
@@ -232,95 +266,64 @@ detection:
     height: 540
 ```
 
+### Recording Detected Objects
+
+QuickCast can automatically record video clips when objects are detected:
+
+```bash
+# Enable recording with object detection
+python -m videofeed.surveillance detect \
+  --path video/front-door \
+  --record \
+  --min-record-confidence 0.5 \
+  --pre-buffer 5 \
+  --post-buffer 10
+```
+
+Recordings are stored in a SQLite database with metadata about detected objects, making them easy to search and filter.
+
 ## Web Dashboard
 
 QuickCast includes a modern web dashboard for viewing all your camera feeds in one place.
 
-### Features
+### Dashboard Features
 
 - **Grid View**: View multiple cameras simultaneously
 - **Switching Views**: Toggle between live streams and object detection
 - **Status Monitoring**: See FPS and detection statistics
 - **Responsive Design**: Works on desktop and mobile devices
+- **Recordings Browser**: View and manage recorded clips
+- **Object Detection Overlays**: See detected objects with bounding boxes and labels
 
 ### Using the Dashboard
 
-1. **Start the server with API enabled**:
+1. **Start the surveillance system with object detection**:
    ```bash
-   python3 video-feed/feed_cli.py run --api-port 3333
+   ./surveillance.sh config
    ```
 
-2. **Open the dashboard**:
-   ```bash
-   ./surveillance.sh dashboard
-   # Or open dashboard.html directly in your browser
+2. **Access the web interface**:
+   Open your browser and navigate to the URL shown in the terminal output, typically:
+   ```
+   http://192.168.x.x:8080
    ```
 
-3. **Enter viewer credentials** when prompted
+3. **View your cameras** in the grid layout
 
-4. **View your cameras** in the grid layout
+4. **Browse recordings** by clicking on the Recordings tab
 
-### Customizing the Dashboard
+> You need to input the viewer password in the dashboard to view the feeds. This password is automatically generated when you run the surveillance system, is displayed in the terminal output, and it's stored in the local system keychain.
 
-The dashboard automatically detects available camera streams through the API. You can customize the layout and view settings directly in the interface.
+### Dashboard Architecture
+
+The dashboard is built with FastAPI and uses:
+
+- **MJPEG Streaming**: For low-latency video with object detection overlays
+- **Jinja2 Templates**: For HTML rendering
+- **SQLite Database**: For storing recording metadata
+- **REST API**: For accessing recordings and statistics
 
 > 💡 **Tip**: For best performance, use Chrome or Firefox browsers for the dashboard.
-
-## Manual Configuration
-
-While the surveillance system provides a streamlined experience, you can still manually configure the MediaMTX server if needed.
-
-Create a `mediamtx.yml` file with your custom configuration:
-
-```yaml
-# Server configuration with multiple stream paths
-
-# Network & protocol settings
-rtspAddress: 0.0.0.0:8554
-rtsp: true
-hls: true
-
-rtspEncryption: optional
-rtspServerKey: server.key # Path to your TLS key
-rtspServerCert: server.crt # Path to your TLS certificate
-
-# Multiple stream paths
-paths:
-  front-door:
-    source: publisher
-  backyard:
-    source: publisher
-  garage:
-    source: publisher
-
-# Authentication users
-authInternalUsers:
-  - user: publisher
-    pass: YOUR_PUBLISHER_PASSWORD
-    permissions:
-      - action: publish
-        path: front-door
-      - action: publish
-        path: backyard
-      - action: publish
-        path: garage
-
-  - user: viewer
-    pass: YOUR_VIEWER_PASSWORD
-    permissions:
-      - action: read
-        path: front-door
-      - action: read
-        path: backyard
-      - action: read
-        path: garage
-```
-
-Then run the server with your custom configuration:
-
-```bash
-python3 video-feed/feed_cli.py run --config ./mediamtx.yml
-```
 
 ## Troubleshooting
 
@@ -334,14 +337,21 @@ python3 video-feed/feed_cli.py run --config ./mediamtx.yml
   - Object detection: 8080
   - API: 3333
 - **"No stream available"**: The publisher hasn't connected or started streaming yet
-- **Detector not starting**: Make sure you have installed `ultralytics`, `fastapi`, and `uvicorn`
-- **Dashboard not showing cameras**: Verify the API is running with `--api-port 3333`
+- **Detector not starting**: Make sure you have installed all dependencies (`pip install -r requirements.txt`)
+- **Dashboard not showing cameras**: Verify the detector is running and accessible
 
 ### Surveillance System Issues
 
 - **Script not running**: Make sure `surveillance.sh` is executable (`chmod +x surveillance.sh`)
 - **Configuration not loading**: Verify `surveillance.yml` is in the correct location
-- **Web dashboard blank**: Check browser console for errors; ensure API is running
+- **Web dashboard blank**: Check browser console for errors; ensure detector is running
+- **Database errors**: If you see SQLite errors, the database might be locked by another process
+
+### Development Issues
+
+- **Module not found errors**: Make sure you're in the right directory or use `python -m videofeed.surveillance`
+- **Import errors**: Ensure you've installed the package with `pip install -e .` in the video-feed directory
+- **MediaMTX not found**: Install MediaMTX and ensure it's in your PATH
 
 ### Network Setup
 
@@ -350,3 +360,11 @@ python3 video-feed/feed_cli.py run --config ./mediamtx.yml
   ifconfig | grep "inet " | grep -v 127.0.0.1
   ```
 - Ensure your firewall allows traffic on the required ports
+
+### Getting Help
+
+If you encounter issues not covered here:
+
+1. Check the logs for error messages
+2. Try running with verbose output: `./surveillance.sh custom --verbose`
+3. Reset credentials if authentication issues persist: `python -m videofeed.surveillance reset`
