@@ -22,8 +22,7 @@ if parent_dir not in sys.path:
 # Now import from videofeed
 from videofeed.credentials import get_credentials, load_config_credentials
 from videofeed.config import write_cfg, load_config_paths
-from videofeed.network import detect_host_ip, check_mediamtx_installed
-from videofeed.server import launch_mediamtx
+from videofeed.utils import detect_host_ip, check_mediamtx_installed, launch_mediamtx
 from videofeed.visualizer import start_visualizer
 
 app = typer.Typer(add_completion=False)

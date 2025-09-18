@@ -15,14 +15,9 @@ import typer
 
 from videofeed.credentials import get_credentials, reset_creds, load_config_credentials
 from videofeed.config import write_cfg, load_config_paths
-from videofeed.network import detect_host_ip, print_urls, check_mediamtx_installed
-from videofeed.server import launch_mediamtx
+from videofeed.utils import detect_host_ip, print_urls, check_mediamtx_installed, launch_mediamtx
 from videofeed.visualizer import start_visualizer
-
-# Application constants
-APP_NAME = "video-feed"
-DEFAULT_PATHS = ["video/iphone-1"]
-MEDIAMTX_BIN = "mediamtx"
+from videofeed.constants import APP_NAME, DEFAULT_PATHS, MEDIAMTX_BIN
 
 app = typer.Typer(add_completion=False)
 

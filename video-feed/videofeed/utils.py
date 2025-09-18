@@ -1,9 +1,29 @@
-"""Network utilities for video-feed."""
+"""Utility functions for video-feed."""
 
 import socket
 import shutil
+import subprocess
 import typer
+from pathlib import Path
 from typing import Dict, List, Optional
+
+from .constants import MEDIAMTX_BIN
+
+
+def launch_mediamtx(cfg_path: Path) -> subprocess.Popen:
+    """Launch the MediaMTX server with the given configuration.
+    
+    Args:
+        cfg_path: Path to mediamtx.yml configuration file
+        
+    Returns:
+        Process object for the running server
+    """
+    return subprocess.Popen(
+        [MEDIAMTX_BIN, cfg_path],
+        stdout=subprocess.PIPE, 
+        stderr=subprocess.PIPE
+    )
 
 
 def detect_host_ip(prefer_iface: Optional[str] = None) -> str:
@@ -14,6 +34,14 @@ def detect_host_ip(prefer_iface: Optional[str] = None) -> str:
             return s.getsockname()[0]
     except Exception:
         return "127.0.0.1"
+
+
+def check_mediamtx_installed(binary_name: str = MEDIAMTX_BIN) -> None:
+    """Check if mediamtx binary is available and exit if not."""
+    if shutil.which(binary_name) is None:
+        typer.secho(f"Error: '{binary_name}' binary not found.", fg=typer.colors.RED, bold=True)
+        typer.echo("Please install MediaMTX from: https://github.com/bluenviron/mediamtx/releases")
+        raise typer.Exit(1)
 
 
 def print_urls(host: str, paths: List[str], creds: Dict[str, str], rtsps: bool = False) -> None:
@@ -68,10 +96,3 @@ def print_urls(host: str, paths: List[str], creds: Dict[str, str], rtsps: bool =
         typer.secho("\n👀 Viewer URL (embedded credentials):", fg=typer.colors.BLUE, bold=True)
         typer.secho("Use in OBS or other video platform- unencrypted", fg=typer.colors.BLUE, bold=True)
         typer.echo(f"   {view_url}")
-
-def check_mediamtx_installed(binary_name: str = "mediamtx") -> None:
-    """Check if mediamtx binary is available and exit if not."""
-    if shutil.which(binary_name) is None:
-        typer.secho(f"Error: '{binary_name}' binary not found.", fg=typer.colors.RED, bold=True)
-        typer.echo("Please install MediaMTX from: https://github.com/bluenviron/mediamtx/releases")
-        raise typer.Exit(1)
