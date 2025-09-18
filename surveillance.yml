@@ -1,0 +1,28 @@
+# Surveillance System Configuration
+# Edit this file to customize your surveillance setup
+
+# Camera stream paths
+cameras:
+  - video/iphone-1
+
+# Network settings
+network:
+  bind: "0.0.0.0"  # Listen on all interfaces
+  api_port: 3333    # API port for path discovery
+
+# Object detection settings
+detection:
+  enabled: true
+  port: 8080
+  model: "yolov8n.pt"  # Options: yolov8n.pt, yolov8s.pt, yolov8m.pt, yolov8l.pt
+  confidence: 0.4
+  resolution:
+    width: 960
+    height: 540
+
+# Security settings
+security:
+  use_tls: true  # Enable RTSPS encryption
+  # Paths to TLS certificates (leave empty to use defaults)
+  tls_key: ""
+  tls_cert: ""

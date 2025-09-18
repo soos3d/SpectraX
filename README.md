@@ -1,46 +1,44 @@
-# QuickCast — Video Stream Manager
+# QuickCast — Video Stream Manager & Surveillance System
 
-QuickCast is a lightweight CLI tool for turning any phone or webcam into a secure RTSP/HLS streaming source in seconds. It’s built for developers who need a simple, no-fuss way to stream video from a camera to a local machine for processing, testing, or development.
+QuickCast is a lightweight CLI tool for turning any phone or webcam into a secure RTSP/HLS streaming source in seconds. It's built for developers who need a simple, no-fuss way to stream video from a camera to a local machine for processing, testing, or development.
 
-There was no easy tool for this—so I built one.
+The new streamlined surveillance system makes it even easier to set up and manage multiple cameras with object detection.
 
-> ⚠️ Early stage: QuickCast is under active development and may contain bugs. It currently uses a self-signed certificate for RTSPS, which can trigger security warnings in some clients. For production use, replace it with a certificate from a trusted CA.
+> ⚠️ Note: QuickCast uses a self-signed certificate for RTSPS by default, which can trigger security warnings in some clients. For production use, replace it with a certificate from a trusted CA.
 
 ## Table of Contents
 
 - [What It Does](#what-it-does)
 - [Prerequisites](#prerequisites)
+- [Surveillance System](#surveillance-system)
 - [Quickstart](#quickstart)
-- [Streamlit Web Interface](#streamlit-web-interface)
-- [Server CLI Usage](#server-cli-usage)
 - [Object Detection with YOLO](#object-detection-with-yolo)
-- [Recording Features](#recording-features)
-- [API Reference](#api-reference)
+- [Web Dashboard](#web-dashboard)
 - [Manual Configuration](#manual-configuration)
-- [Streaming Setup](#streaming-setup)
 - [Troubleshooting](#troubleshooting)
 
 ## What It Does
 
 QuickCast wraps [MediaMTX](https://github.com/bluenviron/mediamtx), a powerful RTSP/HLS server, with:
 
-- One-line CLI startup — instantly launch a secure video stream
-- Automatic credentials — randomly generated publisher/viewer passwords
-- Configuration file support - use a custom config file to manage credentials and paths if you want
-- Multiple streaming outputs — RTSP (low latency), RTSPS (encrypted), and HLS (browser-compatible)
-- Mobile-ready — plug-and-play with Larix Broadcaster or other RTSP clients for phone-based streaming
-- YOLO Object Detection — process video streams with real-time object detection
+- **Unified Surveillance System** — Start streaming server and object detection with a single command
+- **Automatic credentials** — Randomly generated publisher/viewer passwords
+- **Configuration file support** — Simple YAML configuration for all settings
+- **Multiple streaming outputs** — RTSP (low latency), RTSPS (encrypted), and HLS (browser-compatible)
+- **Mobile-ready** — Plug-and-play with Larix Broadcaster or other RTSP clients for phone-based streaming
+- **YOLO Object Detection** — Process video streams with real-time object detection
+- **Web Dashboard** — Modern interface to view all cameras in one place
 
 ### Usage Options
 
+- **Surveillance System**: Complete solution for multiple cameras with object detection
+  → Found in `video-feed/videofeed/surveillance.py`
 - **Python Package**: For integrating streaming into your own Python projects
-→ Found in `video-feed/videofeed/`
+  → Found in `video-feed/videofeed/`
 - **CLI-Only Tool**: Standalone script for quick use (limited features)
-→ Found in `cli-only/`
-- **Object Detection**: Process video feeds with YOLO object detection
-→ Found in `video-feed/videofeed/detector.py`
-
-All instructions in this `README` use the Python package version.
+  → Found in `cli-only/`
+- **Web Dashboard**: HTML/JavaScript interface for viewing all cameras
+  → Found in `dashboard.html`
 
 ## Prerequisites
 
@@ -68,205 +66,133 @@ All instructions in this `README` use the Python package version.
    - **Mobile**: [Larix Broadcaster](https://softvelum.com/larix/) to stream.
    - **Desktop**: [OBS Studio](https://obsproject.com/) to view the feed.
 
+## Surveillance System
+
+The new streamlined surveillance system makes it easy to manage multiple cameras with a single command.
+
+### Quick Start
+
+```bash
+# Start with default settings (1 camera)
+./surveillance.sh quick
+
+# Start with configuration file
+./surveillance.sh config
+
+# Open the web dashboard
+./surveillance.sh dashboard
+```
+
+### Configuration
+
+Edit the `surveillance.yml` file to customize your setup:
+
+```yaml
+# Camera stream paths
+cameras:
+  - video/front-door
+  - video/backyard
+  - video/garage
+
+# Network settings
+network:
+  bind: "0.0.0.0"  # Listen on all interfaces
+  api_port: 3333    # API port for path discovery
+
+# Object detection settings
+detection:
+  enabled: true
+  port: 8080
+  model: "yolov8n.pt"
+  confidence: 0.4
+  resolution:
+    width: 960
+    height: 540
+```
+
+### Features
+
+- **Unified Command**: Start both streaming server and object detection with one command
+- **Configuration File**: Easy YAML configuration for all settings
+- **Web Dashboard**: Modern interface to view all cameras
+- **Multiple Cameras**: Support for multiple camera streams
+- **Secure Streaming**: RTSPS encryption with automatic credential management
+- **Object Detection**: Real-time YOLO object detection
+
 ## Quickstart
 
 Follow these steps to get started with QuickCast:
 
-1. Clone the Repository
+1. **Clone the Repository and Set Up Environment**
 
 ```bash
+# Clone the repository
 git clone https://github.com/soos3d/quickcast-cli.git
-```
+cd quickcast-cli
 
-2. Set Up a Virtual Environment
-
-Create and activate a Python virtual environment:
-
-```bash
+# Set up virtual environment
 python3 -m venv venv
 source venv/bin/activate  # macOS/Linux
-# or
-.\venv\Scripts\activate   # Windows
-```
+# or .\venv\Scripts\activate for Windows
 
-3. Install Dependencies
-
-```bash
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-### Enabling Secure RTSPS Streaming
-
-By default, QuickCast provides both RTSP and RTSPS endpoints. To enable secure RTSPS streaming:
-
-Generate a Self-Signed Certificate
+2. **Basic Usage**
 
 ```bash
-cd video-feed
-openssl genrsa -out server.key 2048
-openssl req -new -x509 -sha256 -key server.key -out server.crt -days 3650
-```
-
-Move both `server.key` and `server.crt` into the same directory as `feed_cli.py` (should already be there if following the commands above).
-
-> ⚠️ Note: Self-signed certificates may trigger warnings in some clients. For production environments, use a certificate issued by a trusted Certificate Authority.
-
-4. Start the RTSP/HLS Server
-
-The `feed_cli.py` tool provides a simple way to manage your MediaMTX server:
-
-```bash
-python3 video-feed/feed_cli.py run
-```
-
-This command will start the RTSP/HLS server and display connection information. Here is an example:
-
-```txt
-⏳ Starting MediaMTX ...
-
-📹 Stream Path: video/iphone-1
-
-📲 Encrypted RTSPS Publishing:
-Use in phone apps (e.g. Larix Broadcaster) or other cameras - encrypted
-  URL: rtsps://<host>:8322/video/iphone-1
-  User: publisher
-  Pass: <password>
-
-📺 Encrypted RTSPS Viewing:
-Use in OBS or other video platform- encrypted
-  URL: rtsps://viewer:<password>@<host>:8322/video/iphone-1
-  • VLC: File > Open Network > rtsps://viewer:<password>@<host>:8322/video/iphone-1
-  • OBS: Souces > + > Media Source > Uncheck local File > add RTSP URL to input >
- rtsps://viewer:<password>@<host>:8322/video/iphone-1
-
-🌐 HLS Viewing (browser):
-Use in OBS or other video platform- encrypted
-  URL: http://<host>:8888/video/iphone-1/index.m3u8
-  Auth: viewer / <password>
-  Direct URL: http://viewer:<password>@<host>:8888/video/iphone-1/index.m3u8
-
-🎥 Unencrypted RTSP Connection Settings:
-Use in phone apps (e.g. Larix Broadcaster) or other cameras - unencrypted
-   URL: rtsp://<host>:8554/video/iphone-1
-   Username: publisher
-   Password: <password>
-
-🎥 Unencrypted RTSP viewing Settings:
-Use in phone apps (e.g. Larix Broadcaster) or other cameras - unencrypted
-
-👀 Viewer URL (embedded credentials):
-Use in OBS or other video platform- unencrypted
-   rtsp://viewer:<password>@<host>:8554/video/iphone-1
-
-Press Ctrl+C to quit.
-```
-
-
-Now simply use the RTSP connection settings to set up your phone or camera to stream to the server. Use the viewer URL to view the stream in any RTSP player like OBS or VLC.
-
-Here is a video on how to set up Larix Broadcaster to stream to the server: [https://www.youtube.com/watch?v=Dhj0_QbtfTw](https://www.youtube.com/watch?v=Dhj0_QbtfTw)
-
-## Streamlit Web Interface
-
-QuickCast includes a basic web-based interface built with Streamlit for easy testing. You can use this provider UI or use the privded view URL to view the stream in any RTSP player like OBS or VLC.
-
-> ⚠️ This UI is meant to be used as a quick test tool and is not recommended for production use. There are many features missing and it is not secure. (for example credentials are stored in the browser's local storage and are not encrypted, uses http instead of https, etc.)
-
-### Running the UI
-
-1. Start the Streamlit interface:
-   ```bash
-   cd basic-ui
-   streamlit run streamlit_ui.py
-   ```
-
-2. Open your browser to the displayed URL (typically http://localhost:8501)
-
-3. Enter your stream URL and viewer credentials in the sidebar (it now defaults to the standard `http://localhost:8888/video/iphone-1/index.m3u8`)
-  - Use the same credential provided by the CLI or your custom config file
-
-4. Use the Advanced Settings to configure buffer length and reconnection behavior for optimal playback
-
-## Server CLI Usage
-
-Use the `--help` flag to list available commands and options:
-
-```bash
-python3 video-feed/feed_cli.py run --help
-```
-
-### Available commands
-
-The `feed_cli.py` tool provides a simple way to manage your MediaMTX server:
-
-Those are the available commands (assumes you are in the `video-feed` directory):
-
-By default, the server binds to all interfaces (LAN + localhost). Pass `--bind 127.0.0.1` to restrict access to this machine only.
-
-```bash
-# Default: bind to all interfaces (LAN + localhost)
+# Start the streaming server (basic mode)
 python3 video-feed/feed_cli.py run
 
-# Restrict to local-only (loopback)
-python3 video-feed/feed_cli.py run --bind 127.0.0.1
+# Start with multiple camera paths
+python3 video-feed/feed_cli.py run --path video/front-door --path video/backyard
 
-# Change the RTSP path (default: video/iphone-1)
-python3 video-feed/feed_cli.py run  --path video/camera1
-
-# Use multiple paths (specify --path multiple times)
-python3 video-feed/feed_cli.py run  --path video/camera1 --path video/camera2
-
-# Show full configuration details (includes credentials be careful)
-python3 video-feed/feed_cli.py run --verbose
-
-# Use a custom config file
-python3 video-feed/feed_cli.py run --config ./my-config.yml
-
-# Expose JSON path API (use to to fetch available paths)
+# Enable the API for web dashboard
 python3 video-feed/feed_cli.py run --api-port 3333
 ```
 
-### Using as a Python Package
+3. **Object Detection**
 
-You can also use video-feed as a Python package in your own projects:
-
-```python
-# Import specific modules
-from videofeed.credentials import get_credentials
-from videofeed.config import create_config
-from videofeed.network import detect_host_ip
-from videofeed.server import launch_mediamtx
-
-# Example: Get streaming credentials
-creds = get_credentials()
-print(f"Publisher: {creds['publish_user']}:{creds['publish_pass']}")
-print(f"Viewer: {creds['read_user']}:{creds['read_pass']}")
-
-# Example: Create streaming config
-host_ip = detect_host_ip()
-paths = ["video/camera1"]
-config = create_config(host_ip, paths, creds)
-
-# Use other functionality as needed
+```bash
+# Start object detection on a stream
+python3 video-feed/feed_cli.py detect --path video/front-door
 ```
+
+4. **Using the Surveillance System**
+
+```bash
+# Quick start with defaults
+./surveillance.sh quick
+
+# Use the configuration file
+./surveillance.sh config
+```
+
+### Connection Information
+
+When the server starts, it displays connection information for cameras and viewers:
+
+- **For cameras**: Use the RTSP/RTSPS publishing URL with publisher credentials
+- **For viewing**: Use the RTSP/RTSPS/HLS viewer URLs with viewer credentials
+
+> 📱 **Mobile streaming**: Use [Larix Broadcaster](https://softvelum.com/larix/) with the publisher URL and credentials
+> 
+> 🖥️ **Desktop viewing**: Use [OBS Studio](https://obsproject.com/) or VLC with the viewer URL
 
 ## Object Detection with YOLO
 
-QuickCast now includes real-time object detection capabilities using the [YOLO (You Only Look Once) model from Ultralytics](https://github.com/ultralytics/ultralytics). This feature allows you to process video streams and detect objects in real-time.
+QuickCast includes real-time object detection capabilities using the [YOLO (You Only Look Once) model from Ultralytics](https://github.com/ultralytics/ultralytics). This feature allows you to process video streams and detect objects in real-time.
 
-### Running Object Detection
-
-Start object detection on a single RTSP stream:
+### Basic Object Detection
 
 ```bash
-python3 video-feed/feed_cli.py detect --path video/iphone-1
-```
+# Start object detection on a single stream
+python3 video-feed/feed_cli.py detect --path video/front-door
 
-Customize the detection parameters:
-
-```bash
+# Customize detection parameters
 python3 video-feed/feed_cli.py detect \
-  --path video/iphone-1 \
+  --path video/front-door \
   --host 0.0.0.0 --port 8080 \
   --model yolov8n.pt --confidence 0.45 \
   --width 1280 --height 720
@@ -274,194 +200,80 @@ python3 video-feed/feed_cli.py detect \
 
 ### Multi-feed Object Detection
 
-Process and view multiple camera feeds simultaneously:
-
 ```bash
-# Process multiple paths from your MediaMTX server
-python3 video-feed/feed_cli.py detect --path video/iphone-1 --path video/ipad-1
+# Process multiple camera feeds
+python3 video-feed/feed_cli.py detect --path video/front-door --path video/backyard
 
-# Or directly specify RTSP URLs
+# Use direct RTSP URLs
 python3 video-feed/feed_cli.py detect \
-  --rtsp-url "rtsps://viewer:password@192.168.0.11:8322/video/iphone-1" \
-  --rtsp-url "rtsps://viewer:password@192.168.0.11:8322/video/ipad-1"
-
-# Mix and match paths and URLs
-python3 video-feed/feed_cli.py detect \
-  --path video/iphone-1 \
-  --rtsp-url "rtsps://viewer:password@other-camera:8322/camera1"
+  --rtsp-url "rtsps://viewer:password@192.168.0.11:8322/video/front-door" \
+  --rtsp-url "rtsps://viewer:password@192.168.0.11:8322/video/backyard"
 ```
 
-The modular package structure makes it easy to integrate streaming capabilities into your Python applications without having to run the CLI directly.
+### Using the Surveillance System
 
-## Recording Features
-
-QuickCast includes a powerful recording system that captures video when objects are detected. This feature allows you to maintain a record of detection events for later review.
-
-### Enabling Recording
-
-Start the object detection viewer with recording enabled:
+The new surveillance system makes it easier to run object detection:
 
 ```bash
-python3 video-feed/feed_cli.py detect \
-  --path video/iphone-1 \
-  --enable-recording \
-  --pre-detection-buffer 5 \
-  --post-detection-buffer 10
+# Start surveillance with object detection enabled
+./surveillance.sh config
 ```
 
-### Key Recording Features
+You can configure detection settings in `surveillance.yml`:
 
-- **Pre-Detection Buffer**: Captures video from before an object was detected (default: 5 seconds)
-- **Post-Detection Buffer**: Continues recording after the last detection (default: 5 seconds)
-- **Automatic Storage Management**: Older recordings are automatically deleted when space is limited
-- **Detection Metadata**: Each recording stores metadata about detected objects, timestamps, and confidence levels
-
-### Recording CLI Options
-
-```bash
-# Basic recording setup
-python3 video-feed/feed_cli.py detect --path video/iphone-1 --enable-recording
-
-# Customize buffer durations
-python3 video-feed/feed_cli.py detect \
-  --path video/iphone-1 \
-  --enable-recording \
-  --pre-detection-buffer 3 \
-  --post-detection-buffer 15 \
-  --min-confidence 0.5
-
-# Specify custom recording directory
-python3 video-feed/feed_cli.py detect \
-  --path video/iphone-1 \
-  --enable-recording \
-  --recordings-dir /path/to/recordings
+```yaml
+detection:
+  enabled: true
+  port: 8080
+  model: "yolov8n.pt"  # Options: yolov8n.pt, yolov8s.pt, yolov8m.pt, yolov8l.pt
+  confidence: 0.4
+  resolution:
+    width: 960
+    height: 540
 ```
 
-## API Reference
+## Web Dashboard
 
-QuickCast provides a comprehensive REST API for interacting with the recording system. This API allows you to query recordings, retrieve detection events, and perform data analysis.
+QuickCast includes a modern web dashboard for viewing all your camera feeds in one place.
 
-### API Endpoints
+### Features
 
-#### Recordings Management
+- **Grid View**: View multiple cameras simultaneously
+- **Switching Views**: Toggle between live streams and object detection
+- **Status Monitoring**: See FPS and detection statistics
+- **Responsive Design**: Works on desktop and mobile devices
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/recordings` | GET | List recordings with filtering and pagination |
-| `/api/recordings/{id}` | GET | Get detailed information about a specific recording |
-| `/api/recordings/{id}` | DELETE | Delete a recording and associated files |
+### Using the Dashboard
 
-#### Alerts and Statistics
+1. **Start the server with API enabled**:
+   ```bash
+   python3 video-feed/feed_cli.py run --api-port 3333
+   ```
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/alerts` | GET | Get detection alerts with filtering by object type and confidence |
-| `/api/stats/objects` | GET | Get statistics about detected object types over time |
-| `/api/stats/times` | GET | Get detection statistics by time of day/week |
-| `/api/streams` | GET | List all video streams with recording statistics |
+2. **Open the dashboard**:
+   ```bash
+   ./surveillance.sh dashboard
+   # Or open dashboard.html directly in your browser
+   ```
 
-### Using the API
+3. **Enter viewer credentials** when prompted
 
-#### Example: Listing Recordings
+4. **View your cameras** in the grid layout
 
-```bash
-# Retrieve all recordings
-curl http://localhost:8000/api/recordings
+### Customizing the Dashboard
 
-# Filter by date range and object type
-curl "http://localhost:8000/api/recordings?start_date=2025-01-01&object_type=person&min_confidence=0.7"
+The dashboard automatically detects available camera streams through the API. You can customize the layout and view settings directly in the interface.
 
-# Pagination
-curl "http://localhost:8000/api/recordings?limit=10&offset=20&sort_by=timestamp&sort_order=desc"
-```
-
-#### Example: Get Alerts
-
-```bash
-# Get recent detection alerts
-curl "http://localhost:8000/api/alerts?min_confidence=0.8"
-
-# Filter alerts by object type
-curl "http://localhost:8000/api/alerts?object_type=car&limit=50"
-```
-
-#### Example: Get Statistics
-
-```bash
-# Get object type statistics
-curl http://localhost:8000/api/stats/objects
-
-# Get temporal detection patterns
-curl "http://localhost:8000/api/stats/times?days=30&object_type=person"
-```
-
-### API Implementation
-
-For developers, you can directly utilize the RecordingsAPI class in your custom applications:
-
-```python
-from videofeed.api import RecordingsAPI
-
-# Initialize the API with database path
-api = RecordingsAPI(db_path="/path/to/recordings.db")
-
-# Get recordings with filtering
-recordings = api.get_recordings(
-    stream_id="camera1",
-    object_type="person",
-    min_confidence=0.7,
-    limit=10,
-    sort_by="timestamp",
-    sort_order="desc"
-)
-
-# Get object detection statistics
-stats = api.get_object_stats(start_date="2025-01-01")
-print(f"Object detection breakdown: {stats['object_percentages']}")
-
-# Close the connection when done
-api.close()
-```
+> 💡 **Tip**: For best performance, use Chrome or Firefox browsers for the dashboard.
 
 ## Manual Configuration
 
-If you prefer to run the server with your own configuration file, create a `mediamtx.yml`. 
+While the surveillance system provides a streamlined experience, you can still manually configure the MediaMTX server if needed.
 
-Here is an example (you manage the credentials here):
+Create a `mediamtx.yml` file with your custom configuration:
 
 ```yaml
-# Server configuration
-paths:
-  video/iphone-1:
-    source: publisher
-
-# Network & protocol settings
-rtspAddress: 0.0.0.0:8554
-rtsp: true
-hls: true
-
-rtspEncryption: optional
-rtspServerKey: server.key # Path to your TLS key
-rtspServerCert: server.crt # Path to your TLS certificate
-
-# Authentication configuration
-authInternalUsers:
-  - user: publisher
-    pass: YOUR_PUBLISHER_PASSWORD
-    permissions:
-      - action: publish
-        path: video/iphone-1
-  - user: viewer
-    pass: YOUR_VIEWER_PASSWORD
-    permissions:
-      - action: read
-        path: video/iphone-1
-```
-
-You can also configure multiple paths in the same config file:
-
-```yml
-# MediaMTX configuration with multiple stream paths
+# Server configuration with multiple stream paths
 
 # Network & protocol settings
 rtspAddress: 0.0.0.0:8554
@@ -474,63 +286,41 @@ rtspServerCert: server.crt # Path to your TLS certificate
 
 # Multiple stream paths
 paths:
-  front-gate:
+  front-door:
     source: publisher
-  back-yard:
+  backyard:
+    source: publisher
+  garage:
     source: publisher
 
 # Authentication users
 authInternalUsers:
   - user: publisher
-    pass: test_publisher_pass
+    pass: YOUR_PUBLISHER_PASSWORD
     permissions:
       - action: publish
-        path: front-gate
+        path: front-door
       - action: publish
-        path: back-yard
+        path: backyard
+      - action: publish
+        path: garage
 
   - user: viewer
-    pass: test_viewer_pass
+    pass: YOUR_VIEWER_PASSWORD
     permissions:
       - action: read
-        path: front-gate
-      - action: playback
-        path: front-gate
+        path: front-door
       - action: read
-        path: back-yard
-      - action: playback
-        path: back-yard
+        path: backyard
+      - action: read
+        path: garage
 ```
 
-## Streaming Setup
+Then run the server with your custom configuration:
 
-### Publishing Video
-
-1. When the server starts, it displays connection information:
-   ```
-   🎥 RTSP Connection Settings:
-      URL: rtsp://192.168.x.x:8554/video/iphone-1
-      Username: publisher
-      Password: abc123xyz789
-   ```
-
-2. In Larix Broadcaster or any other RTSP client:
-   - Open app settings → Connections → Add New → RTSP
-   - Enter the URL, username, and password shown in the terminal
-   - Start streaming from the camera interface
-
-### Viewing the Stream
-
-1. Use the viewer URL provided when starting the server:
-   ```
-   👀 Viewer URL (embedded credentials):
-      rtsp://viewer:xyz789abc123@192.168.x.x:8554/video/iphone-1
-   ```
-
-2. Open this URL in OBS or any RTSP-compatible player:
-   - OBS: click + in the Sources panel → select Media Source → name it (e.g. “RTSP Camera”) → click OK, then uncheck “Local File” → paste the URL.
-   - FFPLAY: `ffplay rtsp://viewer:xyz789abc123@192.168.x.x:8554/video/iphone-1`
-
+```bash
+python3 video-feed/feed_cli.py run --config ./mediamtx.yml
+```
 
 ## Troubleshooting
 
@@ -538,10 +328,20 @@ authInternalUsers:
 
 - **Authentication errors**: Ensure you're using the correct credentials shown in the terminal
 - **No connection**: Make sure your device and streaming server are on the same network
-- **Port issues**: Default RTSP port is 8554, HLS on 8888, visualizer on 8000
+- **Port issues**: 
+  - RTSP: 8554 (unencrypted) / 8322 (encrypted)
+  - HLS: 8888
+  - Object detection: 8080
+  - API: 3333
 - **"No stream available"**: The publisher hasn't connected or started streaming yet
 - **Detector not starting**: Make sure you have installed `ultralytics`, `fastapi`, and `uvicorn`
-- **Multiple feeds not showing**: Verify all streams are active before starting the detector
+- **Dashboard not showing cameras**: Verify the API is running with `--api-port 3333`
+
+### Surveillance System Issues
+
+- **Script not running**: Make sure `surveillance.sh` is executable (`chmod +x surveillance.sh`)
+- **Configuration not loading**: Verify `surveillance.yml` is in the correct location
+- **Web dashboard blank**: Check browser console for errors; ensure API is running
 
 ### Network Setup
 
@@ -549,4 +349,4 @@ authInternalUsers:
   ```bash
   ifconfig | grep "inet " | grep -v 127.0.0.1
   ```
-- Ensure your firewall allows traffic on ports 8554 (RTSP) and 8888 (HLS)
+- Ensure your firewall allows traffic on the required ports

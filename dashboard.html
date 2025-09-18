@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Surveillance Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #0f0f0f;
+            color: #e0e0e0;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+        
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .status {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.25rem 0.75rem;
+            background: rgba(0,255,0,0.1);
+            border: 1px solid rgba(0,255,0,0.3);
+            border-radius: 20px;
+            font-size: 0.875rem;
+            margin-left: auto;
+        }
+        
+        .status.offline {
+            background: rgba(255,0,0,0.1);
+            border-color: rgba(255,0,0,0.3);
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: #00ff00;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        
+        .status.offline .status-dot {
+            background: #ff0000;
+            animation: none;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        .container {
+            padding: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+        
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        
+        .control-group label {
+            font-size: 0.875rem;
+            color: #999;
+        }
+        
+        select, button {
+            padding: 0.5rem 1rem;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            color: #e0e0e0;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        select:hover, button:hover {
+            background: #252525;
+            border-color: #555;
+        }
+        
+        button.primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            font-weight: 500;
+        }
+        
+        button.primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 1.5rem;
+        }
+        
+        .camera-card {
+            background: #1a1a1a;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid #2a2a2a;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .camera-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+        }
+        
+        .camera-header {
+            padding: 1rem;
+            background: #222;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .camera-name {
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .camera-status {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+            background: rgba(0,255,0,0.1);
+            border-radius: 4px;
+            color: #00ff00;
+        }
+        
+        .camera-view {
+            position: relative;
+            padding-top: 56.25%; /* 16:9 aspect ratio */
+            background: #000;
+        }
+        
+        .camera-view img, .camera-view video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        
+        .camera-controls {
+            padding: 1rem;
+            background: #222;
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .camera-controls button {
+            flex: 1;
+            padding: 0.5rem;
+            font-size: 0.875rem;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 2rem;
+            padding: 1.5rem;
+            background: #1a1a1a;
+            border-radius: 12px;
+            border: 1px solid #2a2a2a;
+        }
+        
+        .stat {
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 600;
+            color: #667eea;
+        }
+        
+        .stat-label {
+            font-size: 0.875rem;
+            color: #999;
+            margin-top: 0.25rem;
+        }
+        
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+            color: #666;
+        }
+        
+        .spinner {
+            border: 3px solid #333;
+            border-top-color: #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>
+            🎥 Surveillance Dashboard
+            <span class="status" id="system-status">
+                <span class="status-dot"></span>
+                <span>Connecting...</span>
+            </span>
+        </h1>
+    </div>
+    
+    <div class="container">
+        <div class="controls">
+            <div class="control-group">
+                <label>View Mode</label>
+                <select id="view-mode">
+                    <option value="live">Live Stream</option>
+                    <option value="detection">Object Detection</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label>Grid Layout</label>
+                <select id="grid-layout">
+                    <option value="auto">Auto</option>
+                    <option value="1">1 Camera</option>
+                    <option value="2">2 Cameras</option>
+                    <option value="4">4 Cameras</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label>&nbsp;</label>
+                <button class="primary" onclick="refreshAll()">🔄 Refresh All</button>
+            </div>
+        </div>
+        
+        <div class="grid" id="camera-grid">
+            <!-- Cameras will be added here dynamically -->
+        </div>
+        
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-value" id="active-cameras">0</div>
+                <div class="stat-label">Active Cameras</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="total-detections">0</div>
+                <div class="stat-label">Detections Today</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="fps-average">0</div>
+                <div class="stat-label">Average FPS</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="uptime">00:00</div>
+                <div class="stat-label">System Uptime</div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Configuration
+        const config = {
+            apiUrl: 'http://localhost:3333',
+            detectionUrl: 'http://localhost:8080',
+            hlsBaseUrl: 'http://localhost:8888',
+            credentials: {
+                viewer: 'viewer',
+                password: '' // Will be set from API or prompt
+            }
+        };
+        
+        let cameras = [];
+        let viewMode = 'detection';
+        
+        // Initialize dashboard
+        async function init() {
+            // Try to fetch available paths
+            try {
+                const response = await fetch(`${config.apiUrl}/paths`);
+                if (response.ok) {
+                    const data = await response.json();
+                    cameras = data.paths || [];
+                    updateStatus('online');
+                } else {
+                    updateStatus('offline');
+                    cameras = ['video/camera-1']; // Fallback
+                }
+            } catch (error) {
+                console.error('Failed to fetch paths:', error);
+                updateStatus('offline');
+                cameras = ['video/camera-1']; // Fallback
+            }
+            
+            // Get credentials if needed
+            if (!config.credentials.password) {
+                config.credentials.password = prompt('Enter viewer password:') || '';
+            }
+            
+            renderCameras();
+            startStatusUpdates();
+        }
+        
+        function updateStatus(status) {
+            const statusEl = document.getElementById('system-status');
+            if (status === 'online') {
+                statusEl.classList.remove('offline');
+                statusEl.innerHTML = '<span class="status-dot"></span><span>Online</span>';
+            } else {
+                statusEl.classList.add('offline');
+                statusEl.innerHTML = '<span class="status-dot"></span><span>Offline</span>';
+            }
+        }
+        
+        function renderCameras() {
+            const grid = document.getElementById('camera-grid');
+            grid.innerHTML = '';
+            
+            cameras.forEach((path, index) => {
+                const card = createCameraCard(path, index);
+                grid.appendChild(card);
+            });
+            
+            document.getElementById('active-cameras').textContent = cameras.length;
+        }
+        
+        function createCameraCard(path, index) {
+            const card = document.createElement('div');
+            card.className = 'camera-card';
+            
+            const cameraName = path.split('/').pop();
+            const viewMode = document.getElementById('view-mode').value;
+            
+            let videoSource = '';
+            if (viewMode === 'detection') {
+                // Use object detection stream
+                videoSource = `${config.detectionUrl}/video/stream`;
+            } else {
+                // Use HLS stream
+                videoSource = `${config.hlsBaseUrl}/${path}/index.m3u8`;
+            }
+            
+            card.innerHTML = `
+                <div class="camera-header">
+                    <div class="camera-name">
+                        📹 ${cameraName}
+                    </div>
+                    <div class="camera-status">Live</div>
+                </div>
+                <div class="camera-view">
+                    ${viewMode === 'detection' ? 
+                        `<img src="${videoSource}" alt="${cameraName}" />` :
+                        `<video id="video-${index}" controls autoplay muted></video>`
+                    }
+                </div>
+                <div class="camera-controls">
+                    <button onclick="fullscreen(${index})">🔍 Fullscreen</button>
+                    <button onclick="snapshot(${index})">📷 Snapshot</button>
+                </div>
+            `;
+            
+            // If HLS mode, initialize the video player
+            if (viewMode === 'live') {
+                setTimeout(() => initHlsPlayer(index, videoSource), 100);
+            }
+            
+            return card;
+        }
+        
+        function initHlsPlayer(index, source) {
+            const video = document.getElementById(`video-${index}`);
+            if (!video) return;
+            
+            if (Hls && Hls.isSupported()) {
+                const hls = new Hls({
+                    xhrSetup: function(xhr, url) {
+                        xhr.setRequestHeader('Authorization', 
+                            'Basic ' + btoa(config.credentials.viewer + ':' + config.credentials.password));
+                    }
+                });
+                hls.loadSource(source);
+                hls.attachMedia(video);
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                video.src = source;
+            }
+        }
+        
+        function fullscreen(index) {
+            const video = document.querySelector(`.camera-card:nth-child(${index + 1}) .camera-view`);
+            if (video.requestFullscreen) {
+                video.requestFullscreen();
+            }
+        }
+        
+        function snapshot(index) {
+            // Implementation for taking snapshots
+            alert('Snapshot feature coming soon!');
+        }
+        
+        function refreshAll() {
+            renderCameras();
+        }
+        
+        function startStatusUpdates() {
+            // Update stats every 5 seconds
+            setInterval(async () => {
+                try {
+                    const response = await fetch(`${config.detectionUrl}/status`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        // Update FPS if available
+                        if (data.fps) {
+                            document.getElementById('fps-average').textContent = Math.round(data.fps);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Failed to fetch status:', error);
+                }
+            }, 5000);
+            
+            // Update uptime
+            const startTime = Date.now();
+            setInterval(() => {
+                const uptime = Date.now() - startTime;
+                const hours = Math.floor(uptime / 3600000);
+                const minutes = Math.floor((uptime % 3600000) / 60000);
+                document.getElementById('uptime').textContent = 
+                    `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+            }, 1000);
+        }
+        
+        // Event listeners
+        document.getElementById('view-mode').addEventListener('change', renderCameras);
+        document.getElementById('grid-layout').addEventListener('change', (e) => {
+            const grid = document.getElementById('camera-grid');
+            if (e.target.value === 'auto') {
+                grid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(400px, 1fr))';
+            } else {
+                const cols = Math.ceil(Math.sqrt(parseInt(e.target.value)));
+                grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+            }
+        });
+        
+        // Load HLS.js library
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/hls.js@latest';
+        script.onload = init;
+        document.head.appendChild(script);
+    </script>
+</body>
+</html>

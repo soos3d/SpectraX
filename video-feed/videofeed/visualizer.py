@@ -58,6 +58,16 @@ recordings_api = None
 recordings_directory = None
 
 
+def set_detector_manager(manager):
+    """Set the global detector manager instance.
+    
+    This function is called by the surveillance system to set the detector manager.
+    """
+    global detector_manager
+    detector_manager = manager
+    logger.info(f"Detector manager set with {len(manager.get_all_detectors())} detectors")
+    return detector_manager
+
 
 @app.get("/video/stream")
 async def video_feed(feed: Optional[str] = None):
