@@ -154,6 +154,15 @@ class SurveillanceConfig:
                 'use_tls': True,
                 'tls_key': '',
                 'tls_cert': ''
+            },
+            'recording': {
+                'enabled': True,
+                'min_confidence': 0.5,
+                'pre_buffer_seconds': 10,
+                'post_buffer_seconds': 10,
+                'max_storage_gb': 10.0,
+                'recordings_dir': '~/video-feed-recordings',
+                'record_objects': []
             }
         }
     
@@ -172,6 +181,10 @@ class SurveillanceConfig:
     def get_security_config(self) -> Dict[str, Any]:
         """Get security configuration."""
         return self.config_data.get('security', {})
+    
+    def get_recording_config(self) -> Dict[str, Any]:
+        """Get recording configuration."""
+        return self.config_data.get('recording', {})
     
     def get_bind_address(self) -> str:
         """Get bind address."""
@@ -219,3 +232,35 @@ class SurveillanceConfig:
             return Path(tls_key), Path(tls_cert)
         
         return None, None
+    
+    def is_recording_enabled(self) -> bool:
+        """Check if recording is enabled."""
+        return self.get_recording_config().get('enabled', True)
+    
+    def get_recording_min_confidence(self) -> float:
+        """Get minimum confidence for recording."""
+        return self.get_recording_config().get('min_confidence', 0.5)
+    
+    def get_recording_pre_buffer(self) -> int:
+        """Get pre-detection buffer seconds."""
+        return self.get_recording_config().get('pre_buffer_seconds', 10)
+    
+    def get_recording_post_buffer(self) -> int:
+        """Get post-detection buffer seconds."""
+        return self.get_recording_config().get('post_buffer_seconds', 10)
+    
+    def get_recording_max_storage(self) -> float:
+        """Get maximum storage in GB."""
+        return self.get_recording_config().get('max_storage_gb', 10.0)
+    
+    def get_recordings_directory(self) -> str:
+        """Get recordings directory."""
+        return self.get_recording_config().get('recordings_dir', '~/video-feed-recordings')
+    
+    def get_record_objects(self) -> list:
+        """Get list of objects to record.
+        
+        Returns:
+            List of object classes to record. Empty list means record all objects.
+        """
+        return self.get_recording_config().get('record_objects', [])

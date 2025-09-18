@@ -149,9 +149,25 @@ class SurveillanceSystem:
         port: int,
         model: str,
         confidence: float,
-        resolution: tuple
+        resolution: tuple,
+        enable_recording: bool = True,
+        recording_min_confidence: float = 0.5,
+        recording_pre_buffer: int = 10,
+        recording_post_buffer: int = 10,
+        recordings_dir: Optional[str] = None,
+        record_objects: List[str] = []
     ):
         """Start the object detection service in a separate thread."""
+        # Store recording configuration for status display
+        self.recording_enabled = enable_recording
+        self.recording_config = {
+            'min_confidence': recording_min_confidence,
+            'pre_buffer': recording_pre_buffer,
+            'post_buffer': recording_post_buffer,
+            'recordings_dir': recordings_dir,
+            'record_objects': record_objects
+        }
+        
         def run_detector():
             # Build RTSP URLs from paths
             rtsp_urls = []
@@ -167,11 +183,26 @@ class SurveillanceSystem:
             # Import here to avoid circular imports
             from videofeed.detector import DetectorManager
             from videofeed.visualizer import app, set_detector_manager
+            from videofeed.recorder import RecordingManager
             import uvicorn
             
             try:
+                # Initialize recording manager if enabled
+                recording_manager = None
+                if enable_recording:
+                    typer.echo(f"📹 Initializing recording manager...")
+                    recording_manager = RecordingManager(
+                        recordings_dir=recordings_dir,
+                        min_confidence=recording_min_confidence,
+                        pre_detection_buffer=recording_pre_buffer,
+                        post_detection_buffer=recording_post_buffer,
+                        record_objects=record_objects
+                    )
+                    recording_manager.start()
+                    typer.echo(f"📹 Recording enabled - clips will be saved to {recording_manager.recordings_dir}")
+                
                 # Initialize detector manager
-                detector_manager = DetectorManager()
+                detector_manager = DetectorManager(recording_manager=recording_manager)
                 
                 # Add detectors for each URL
                 for url in rtsp_urls:
@@ -179,7 +210,8 @@ class SurveillanceSystem:
                         source_url=url,
                         model_path=model,
                         confidence=confidence,
-                        resolution=resolution
+                        resolution=resolution,
+                        enable_recording=enable_recording
                     )
                 
                 # Set the detector manager in the visualizer module
@@ -233,6 +265,26 @@ class SurveillanceSystem:
             typer.echo(f"  Paths API: http://{self.config['host_ip']}:{self.config['api_port']}/paths")
             
         typer.echo()
+        
+        # Print recording info if enabled
+        if hasattr(self, 'recording_enabled') and self.recording_enabled:
+            typer.secho("📹 Recording:", fg=typer.colors.BLUE, bold=True)
+            typer.echo(f"  Status: Enabled")
+            typer.echo(f"  Pre-detection buffer: {self.recording_config['pre_buffer']} seconds")
+            typer.echo(f"  Post-detection buffer: {self.recording_config['post_buffer']} seconds")
+            typer.echo(f"  Minimum confidence: {self.recording_config['min_confidence']}")
+            if self.recording_config['recordings_dir']:
+                typer.echo(f"  Directory: {self.recording_config['recordings_dir']}")
+            
+            # Show object filtering
+            if self.recording_config['record_objects']:
+                typer.echo(f"  Recording objects: {', '.join(self.recording_config['record_objects'])}")
+            else:
+                typer.echo(f"  Recording objects: All objects")
+            typer.echo()
+        else:
+            typer.secho("📹 Recording: Disabled", fg=typer.colors.BRIGHT_BLACK)
+            typer.echo()
         
         # Print secure viewer URLs
         typer.secho("🔐 Secure Viewer URLs:", fg=typer.colors.MAGENTA, bold=True)
@@ -299,6 +351,12 @@ def config(
         api_port=config.get_api_port(),
         tls_key=tls_key,
         tls_cert=tls_cert,
+        recording=config.is_recording_enabled(),
+        recording_min_confidence=config.get_recording_min_confidence(),
+        recording_pre_buffer=config.get_recording_pre_buffer(),
+        recording_post_buffer=config.get_recording_post_buffer(),
+        recordings_dir=config.get_recordings_directory(),
+        record_objects=config.get_record_objects(),
     )
 
 
@@ -320,6 +378,12 @@ def start(
     api_port: Optional[int] = typer.Option(3333, "--api-port", help="API port for paths"),
     tls_key: Optional[Path] = typer.Option(None, help="TLS key path"),
     tls_cert: Optional[Path] = typer.Option(None, help="TLS certificate path"),
+    recording: bool = typer.Option(True, "--recording/--no-recording", help="Enable recording"),
+    recording_min_confidence: float = typer.Option(0.5, "--recording-confidence", help="Minimum confidence for recording"),
+    recording_pre_buffer: int = typer.Option(10, "--pre-buffer", help="Pre-detection buffer seconds"),
+    recording_post_buffer: int = typer.Option(10, "--post-buffer", help="Post-detection buffer seconds"),
+    recordings_dir: Optional[str] = typer.Option(None, "--recordings-dir", help="Recordings directory"),
+    record_objects: List[str] = typer.Option([], "--record-objects", help="List of object classes to record (empty means all)"),
 ):
     """Start the unified surveillance system with streaming and object detection."""
     
@@ -348,7 +412,13 @@ def start(
                 port=detector_port,
                 model=model,
                 confidence=confidence,
-                resolution=(width, height)
+                resolution=(width, height),
+                enable_recording=recording,
+                recording_min_confidence=recording_min_confidence,
+                recording_pre_buffer=recording_pre_buffer,
+                recording_post_buffer=recording_post_buffer,
+                recordings_dir=recordings_dir,
+                record_objects=record_objects
             )
             time.sleep(2)  # Give detector time to initialize
             

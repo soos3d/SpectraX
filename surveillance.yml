@@ -20,6 +20,17 @@ detection:
     width: 960
     height: 540
 
+# Recording settings
+recording:
+  enabled: true
+  min_confidence: 0.5  # Minimum confidence to trigger recording
+  pre_buffer_seconds: 10  # Seconds to record before detection
+  post_buffer_seconds: 10  # Seconds to record after last detection
+  max_storage_gb: 10.0  # Maximum storage in GB before cleanup
+  recordings_dir: "~/video-feed-recordings"  # Directory to store recordings
+  # Only record when these objects are detected (empty list means record all objects)
+  record_objects: ["person", "car", "dog", "cat"]
+
 # Security settings
 security:
   use_tls: true  # Enable RTSPS encryption

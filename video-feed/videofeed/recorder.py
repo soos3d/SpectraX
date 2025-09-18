@@ -25,12 +25,13 @@ class RecordingManager:
         self,
         db_path: Optional[str] = None,
         recordings_dir: Optional[str] = None,
-        pre_detection_buffer: int = 5,      # Seconds to keep before detection
-        post_detection_buffer: int = 5,     # Seconds to keep after last detection
+        pre_detection_buffer: int = 10,     # Seconds to keep before detection
+        post_detection_buffer: int = 10,    # Seconds to keep after last detection
         min_confidence: float = 0.5,        # Minimum confidence to trigger recording
-        fps: int = 40,                      # Target FPS for recordings
+        target_fps: int = 30,               # Target FPS for recordings
         codec: str = 'mp4v',                # Video codec (mp4v is widely compatible)
-        max_storage_gb: float = 10.0        # Max storage in GB before cleanup
+        max_storage_gb: float = 10.0,       # Max storage in GB before cleanup
+        record_objects: List[str] = []      # List of object classes to record (empty means all)
     ):
         """Initialize the recording manager.
         
@@ -53,13 +54,15 @@ class RecordingManager:
         self.pre_detection_buffer = pre_detection_buffer
         self.post_detection_buffer = post_detection_buffer
         self.min_confidence = min_confidence
-        self.fps = fps
+        self.target_fps = target_fps
         self.fourcc = cv2.VideoWriter_fourcc(*codec)
         self.max_storage_bytes = max_storage_gb * 1024 * 1024 * 1024  # Convert GB to bytes
+        self.record_objects = [obj.lower() for obj in record_objects]  # Store lowercase for case-insensitive matching
         
         # Runtime state
         self.frame_buffers = {}  # Dict of stream_id -> deque of (timestamp, frame) tuples
         self.active_recordings = {}  # Dict of recording_id -> recording_info
+        self.stream_fps = {}  # Dict of stream_id -> actual FPS
         self.db_conn = None
         self._lock = threading.RLock()
         self.running = False
@@ -136,23 +139,28 @@ class RecordingManager:
         Args:
             stream_id: Unique identifier for the stream
             stream_name: Human-readable name for the stream
-            buffer_seconds: Seconds of video to keep in buffer
         """
         from collections import deque
         
         with self._lock:
-            # Calculate buffer size based on FPS and pre-detection buffer duration
-            buffer_size = self.pre_detection_buffer * self.fps
+            # Start with estimated buffer size, will adjust based on actual FPS
+            estimated_buffer_size = self.pre_detection_buffer * self.target_fps
             self.frame_buffers[stream_id] = {
-                'buffer': deque(maxlen=buffer_size),
+                'buffer': deque(maxlen=estimated_buffer_size),
                 'name': stream_name,
                 'last_recording': 0,
                 'recording_in_progress': False,
                 'last_detection_time': 0,
                 'cooldown_timer': None,
-                'timer_lock': threading.Lock()
+                'timer_lock': threading.Lock(),
+                'frame_count': 0,
+                'fps_start_time': time.time(),
+                'actual_fps': self.target_fps,
+                'last_fps_update': time.time()
             }
-        logger.info(f"Registered stream {stream_id} ({stream_name}) for recording")
+            # Initialize FPS tracking
+            self.stream_fps[stream_id] = self.target_fps
+        logger.info(f"Registered stream {stream_id} ({stream_name}) for recording with {estimated_buffer_size} frame buffer")
             
     def unregister_stream(self, stream_id: str):
         """Unregister a stream from recording.
@@ -177,22 +185,54 @@ class RecordingManager:
             timestamp = time.time()
             
         with self._lock:
-            if stream_id in self.frame_buffers:
-                # Make a copy of the frame to avoid reference issues
-                self.frame_buffers[stream_id]['buffer'].append((timestamp, frame.copy()))
+            if stream_id not in self.frame_buffers:
+                return
                 
-                # If we're currently recording for this stream, add the frame to the recording
-                if self.frame_buffers[stream_id]['recording_in_progress']:
-                    for recording_id, recording in list(self.active_recordings.items()):
-                        if recording['stream_id'] == stream_id:
-                            try:
-                                recording['writer'].write(frame.copy())
-                                recording['frame_count'] += 1
-                                
-                                # Update last frame time
-                                recording['last_frame_time'] = timestamp
-                            except Exception as e:
-                                logger.error(f"Error writing frame to recording {recording_id}: {e}")
+            stream_info = self.frame_buffers[stream_id]
+            
+            # Update FPS calculation
+            stream_info['frame_count'] += 1
+            current_time = time.time()
+            
+            # Calculate actual FPS every 5 seconds
+            if current_time - stream_info['last_fps_update'] >= 5.0:
+                time_elapsed = current_time - stream_info['fps_start_time']
+                if time_elapsed > 0:
+                    actual_fps = stream_info['frame_count'] / time_elapsed
+                    stream_info['actual_fps'] = actual_fps
+                    self.stream_fps[stream_id] = actual_fps
+                    
+                    # Adjust buffer size based on actual FPS
+                    new_buffer_size = int(self.pre_detection_buffer * actual_fps)
+                    if new_buffer_size != stream_info['buffer'].maxlen:
+                        # Create new buffer with correct size
+                        from collections import deque
+                        old_buffer = list(stream_info['buffer'])
+                        stream_info['buffer'] = deque(old_buffer[-new_buffer_size:], maxlen=new_buffer_size)
+                        logger.info(f"Adjusted buffer size for {stream_id}: {new_buffer_size} frames (FPS: {actual_fps:.1f})")
+                    
+                    # Reset counters
+                    stream_info['frame_count'] = 0
+                    stream_info['fps_start_time'] = current_time
+                    stream_info['last_fps_update'] = current_time
+            
+            # Make a copy of the frame to avoid reference issues
+            stream_info['buffer'].append((timestamp, frame.copy()))
+            
+            # If we're currently recording for this stream, add the frame to the recording
+            if stream_info['recording_in_progress']:
+                for recording_id, recording in list(self.active_recordings.items()):
+                    if recording['stream_id'] == stream_id:
+                        try:
+                            recording['writer'].write(frame.copy())
+                            recording['frame_count'] += 1
+                            
+                            # Update last frame time
+                            recording['last_frame_time'] = timestamp
+                        except Exception as e:
+                            logger.error(f"Error writing frame to recording {recording_id}: {e}")
+                            # If writing fails, finalize the recording
+                            self._finalize_recording(recording_id)
                 
     def handle_detection(self, stream_id: str, objects: List[Dict], confidence: float, frame: np.ndarray):
         """Handle an object detection event and possibly start or continue recording.
@@ -209,17 +249,27 @@ class RecordingManager:
             confidence: Highest confidence score
             frame: Current video frame
         """
-        """Handle an object detection event and possibly start recording.
-        
-        Args:
-            stream_id: Stream ID where detection occurred
-            objects: List of detected objects with class, confidence, etc.
-            confidence: Highest confidence score
-            frame: Current video frame
-        """
         # Skip if confidence is too low
         if confidence < self.min_confidence:
             return
+            
+        # Filter by object classes if record_objects is specified
+        if self.record_objects:
+            # Check if any detected object is in our record_objects list
+            detected_classes = [obj['class'].lower() for obj in objects]
+            if not any(cls in self.record_objects for cls in detected_classes):
+                logger.debug(f"Skipping recording for objects {detected_classes} - not in record list {self.record_objects}")
+                return
+            
+            # Filter objects to only include those we want to record
+            filtered_objects = [obj for obj in objects if obj['class'].lower() in self.record_objects]
+            
+            # If no objects remain after filtering, skip recording
+            if not filtered_objects:
+                return
+                
+            # Update objects list to only include filtered objects
+            objects = filtered_objects
             
         current_time = time.time()
             
@@ -274,18 +324,32 @@ class RecordingManager:
             # Get frame dimensions
             height, width = frame.shape[:2]
             
-            # Create a video writer
+            # Use actual FPS for this stream
+            actual_fps = self.stream_fps.get(stream_id, self.target_fps)
+            
+            # Create a video writer with actual FPS
             writer = cv2.VideoWriter(
                 video_path, 
                 self.fourcc, 
-                self.fps, 
+                actual_fps, 
                 (width, height)
             )
             
+            if not writer.isOpened():
+                logger.error(f"Failed to open video writer for {video_path}")
+                return
+            
             # Write buffered frames (pre-detection footage)
+            buffer_frames_written = 0
             for ts, buffered_frame in list(stream_info['buffer']):
                 if buffered_frame is not None:
-                    writer.write(buffered_frame)
+                    try:
+                        writer.write(buffered_frame)
+                        buffer_frames_written += 1
+                    except Exception as e:
+                        logger.error(f"Error writing buffered frame: {e}")
+            
+            logger.info(f"Wrote {buffer_frames_written} buffered frames to recording {recording_id}")
             
             # Update stream info
             stream_info['recording_in_progress'] = True
@@ -438,59 +502,36 @@ class RecordingManager:
             except Exception as e:
                 logger.error(f"Failed to save recording {recording_id} to database: {e}")
         
-    # This method is no longer needed
-    # def _continue_recording(self, recording_id: str):
-        """Finalize a recording and save to database.
+    def get_recording_stats(self) -> Dict:
+        """Get statistics about active recordings and buffers.
         
-        Args:
-            recording_id: ID of the recording to finalize
+        Returns:
+            Dict: Statistics about the recording system
         """
         with self._lock:
-            if recording_id not in self.active_recordings:
-                return
-                
-            recording = self.active_recordings[recording_id]
-            stream_id = recording['stream_id']
+            stats = {
+                'active_recordings': len(self.active_recordings),
+                'registered_streams': len(self.frame_buffers),
+                'stream_info': {},
+                'settings': {
+                    'min_confidence': self.min_confidence,
+                    'pre_buffer_seconds': self.pre_detection_buffer,
+                    'post_buffer_seconds': self.post_detection_buffer,
+                    'record_objects': self.record_objects if self.record_objects else 'all'
+                }
+            }
             
-            # Release the video writer
-            writer = recording['writer']
-            writer.release()
+            for stream_id, stream_info in self.frame_buffers.items():
+                stats['stream_info'][stream_id] = {
+                    'name': stream_info['name'],
+                    'buffer_size': len(stream_info['buffer']),
+                    'max_buffer_size': stream_info['buffer'].maxlen,
+                    'actual_fps': stream_info.get('actual_fps', self.target_fps),
+                    'recording_in_progress': stream_info['recording_in_progress']
+                }
             
-            # Calculate duration
-            end_time = time.time()
-            duration = end_time - recording['start_time']
-            
-            # Reset stream recording flag
-            if stream_id in self.frame_buffers:
-                self.frame_buffers[stream_id]['recording_in_progress'] = False
-            
-            # Save recording to database
-            try:
-                cursor = self.db_conn.cursor()
-                cursor.execute('''
-                INSERT INTO recordings 
-                (timestamp, stream_id, stream_name, file_path, duration, 
-                objects_detected, thumbnail_path, confidence, retained)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
-                ''', (
-                    datetime.fromtimestamp(recording['start_time']).isoformat(),
-                    stream_id,
-                    recording['stream_name'],
-                    recording['file_path'],
-                    duration,
-                    json.dumps(recording['objects']),
-                    recording['thumbnail_path'],
-                    recording['confidence']
-                ))
-                self.db_conn.commit()
-                
-                # Remove from active recordings
-                del self.active_recordings[recording_id]
-                
-                logger.info(f"Finalized recording {recording_id} (duration: {duration:.2f}s, frames: {recording['frame_count']})")
-            except Exception as e:
-                logger.error(f"Failed to save recording {recording_id} to database: {e}")
-                
+            return stats
+        
     def _save_thumbnail(self, frame: np.ndarray, path: str):
         """Save a thumbnail image from a frame.
         

@@ -1,8 +1,8 @@
-# QuickCast — Unified Surveillance System
+# SentriX — Unified Surveillance System
 
-QuickCast is a streamlined surveillance system for turning any phone, tablet, or IP camera into a secure RTSP/HLS streaming source with object detection capabilities. It's built for people who need a simple, powerful wa, and private way to set up a surveillance system or a quick streaming solution.
+SentriX is a streamlined surveillance system for turning any phone, tablet, or IP camera into a secure RTSP/HLS streaming source with object detection capabilities. It's built for people who need a simple, powerful wa, and private way to set up a surveillance system or a quick streaming solution.
 
-> ⚠️ Note: QuickCast uses a self-signed certificate for RTSPS by default, which can trigger security warnings in some clients. For production use, replace it with a certificate from a trusted CA.
+> ⚠️ Note: SentriX uses a self-signed certificate for RTSPS by default, which can trigger security warnings in some clients. For production use, replace it with a certificate from a trusted CA.
 
 ## Table of Contents
 
@@ -16,7 +16,7 @@ QuickCast is a streamlined surveillance system for turning any phone, tablet, or
 
 ## What It Does
 
-QuickCast wraps [MediaMTX](https://github.com/bluenviron/mediamtx), a powerful RTSP/HLS server, with:
+SentriX wraps [MediaMTX](https://github.com/bluenviron/mediamtx), a powerful RTSP/HLS server, with:
 
 - **Unified Surveillance System** — Start streaming server and object detection with a single command
 - **Automatic credentials** — Randomly generated publisher/viewer passwords
@@ -29,7 +29,7 @@ QuickCast wraps [MediaMTX](https://github.com/bluenviron/mediamtx), a powerful R
 
 ## System Architecture
 
-QuickCast has been streamlined into a clean, modular architecture:
+SentriX has been streamlined into a clean, modular architecture:
 
 ```
 video-feed/
@@ -150,14 +150,14 @@ detection:
 
 ## Getting Started
 
-Follow these steps to get started with QuickCast:
+Follow these steps to get started with SentriX:
 
 1. **Clone the Repository and Set Up Environment**
 
 ```bash
 # Clone the repository
-git clone https://github.com/soos3d/quickcast-cli.git
-cd quickcast-cli
+git clone https://github.com/soos3d/SentriX-cli.git
+cd SentriX-cli
 
 # Set up virtual environment
 python3 -m venv venv
@@ -218,7 +218,7 @@ When the server starts, it displays connection information for cameras and viewe
 
 ## Object Detection with YOLO
 
-QuickCast includes real-time object detection capabilities using the [YOLO (You Only Look Once) model from Ultralytics](https://github.com/ultralytics/ultralytics). This feature allows you to process video streams and detect objects in real-time.
+SentriX includes real-time object detection capabilities using the [YOLO (You Only Look Once) model from Ultralytics](https://github.com/ultralytics/ultralytics). This feature allows you to process video streams and detect objects in real-time.
 
 ### Object Detection Features
 
@@ -268,7 +268,7 @@ detection:
 
 ### Recording Detected Objects
 
-QuickCast can automatically record video clips when objects are detected:
+SentriX can automatically record video clips when objects are detected:
 
 ```bash
 # Enable recording with object detection
@@ -284,7 +284,7 @@ Recordings are stored in a SQLite database with metadata about detected objects,
 
 ## Web Dashboard
 
-QuickCast includes a modern web dashboard for viewing all your camera feeds in one place.
+SentriX includes a modern web dashboard for viewing all your camera feeds in one place.
 
 ### Dashboard Features
 
