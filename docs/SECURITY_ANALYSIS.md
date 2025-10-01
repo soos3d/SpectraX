@@ -9,13 +9,14 @@
 
 SentriX is a well-architected local surveillance system built around MediaMTX (RTSP/HLS server), YOLO object detection, and FastAPI visualization. The system prioritizes **privacy-first design** with no cloud dependencies. Current security is **moderate** with good foundations but several areas need hardening for production use.
 
-**Current Security Posture:** 🟡 **MODERATE**
+**Current Security Posture:** 🟡 **MODERATE** → 🟢 **IMPROVING**
 - ✅ Local-only operation (no third-party services)
 - ✅ TLS/RTSPS encryption support
 - ✅ OS keyring credential storage
+- ✅ **FIXED: Restricted CORS policy** (2025-10-01)
+- ✅ **FIXED: Path traversal protection** (2025-10-01)
 - ⚠️ Self-signed certificates (expected)
 - ⚠️ Basic authentication only
-- ⚠️ Wide-open CORS policy
 - ⚠️ No rate limiting or brute-force protection
 - ⚠️ Credentials in URLs (RTSP standard but risky)
 
@@ -31,7 +32,7 @@ SentriX is a well-architected local surveillance system built around MediaMTX (R
 
 2. **FastAPI Visualizer** - Web dashboard and API
    - Port: 8080 (default)
-   - CORS: Wide open (`allow_origins=["*"]`)
+   - CORS: ✅ **Restricted to specific origins** (localhost + host IP)
    - Authentication: Simple credential verification endpoint
 
 3. **YOLO Detector** - Object detection pipeline
@@ -108,22 +109,29 @@ return secrets.token_urlsafe(24)  # 32 chars, ~144 bits entropy
 - **Credential verification endpoint** (`/auth/verify`)
 - **Separate user roles** (publisher vs viewer)
 
-#### 🚨 Critical Vulnerabilities
+#### ✅ Fixed Vulnerabilities
 
-**Wide-Open CORS Policy**
+**CORS Policy - FIXED (2025-10-01)**
 ```python
-# From visualizer.py lines 36-42
+# From visualizer.py - NOW SECURE
+allowed_origins = [
+    "http://localhost:8080",
+    "http://127.0.0.1:8080",
+    f"http://{host_ip}:8080",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # ⚠️ CRITICAL: Allows ANY origin
+    allow_origins=allowed_origins,  # ✅ Restricted origins
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "DELETE", "PUT"],  # ✅ Specific methods
+    allow_headers=["Content-Type", "Authorization", "Cookie"],  # ✅ Specific headers
 )
 ```
-- **CSRF attacks possible** from any website
-- **XSS exploitation** if combined with other vulnerabilities
-- **Data exfiltration** from malicious sites
+- ✅ **CSRF attacks blocked** from unauthorized origins
+- ✅ **Limited attack surface** with specific methods/headers
+- ✅ **Preflight caching** for performance
 
 **No Authentication Middleware**
 ```python
@@ -258,16 +266,26 @@ recordings_dir: "~/video-feed-recordings"
 - `/status` - System status
 - `/feeds` - List all camera feeds
 
-**No Input Validation**
+**Input Validation - FIXED (2025-10-01)**
 ```python
-# From visualizer.py line 155
+# From visualizer.py - NOW SECURE
 @app.get("/recordings/{file_path:path}")
 async def serve_recording_file(file_path: str):
-    file_full_path = os.path.join(recordings_directory, file_path)
+    recordings_path = Path(recordings_directory).resolve()
+    requested_path = (recordings_path / file_path).resolve()
+    
+    # ✅ Prevent path traversal
+    if not requested_path.is_relative_to(recordings_path):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # ✅ Validate file type
+    allowed_extensions = {'.mp4', '.jpg', '.jpeg', '.png', '.webm', '.enc'}
+    if requested_path.suffix.lower() not in allowed_extensions:
+        raise HTTPException(status_code=403, detail="File type not allowed")
 ```
-- **Path traversal vulnerability** possible
-- No sanitization of `file_path`
-- Could access files outside recordings directory
+- ✅ **Path traversal attacks blocked**
+- ✅ **File type whitelist** enforced
+- ✅ **Audit logging** for all file access
 
 **SQL Injection Risk** (Low but present)
 - Using parameterized queries (good!)
@@ -633,8 +651,8 @@ app.add_middleware(
 
 ### Phase 1: Critical Fixes (Week 1)
 - [ ] Add authentication middleware to all endpoints
-- [ ] Fix CORS policy
-- [ ] Fix path traversal vulnerability
+- [x] **Fix CORS policy** ✅ Completed 2025-10-01
+- [x] **Fix path traversal vulnerability** ✅ Completed 2025-10-01
 - [ ] Add rate limiting to auth endpoint
 - [ ] Harden file permissions
 

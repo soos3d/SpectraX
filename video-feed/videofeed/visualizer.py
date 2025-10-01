@@ -23,6 +23,7 @@ from videofeed.detector import DetectorManager
 from videofeed.credentials import get_credentials, APP_NAME
 from videofeed.recorder import RecordingManager
 from videofeed.api import RecordingsAPI
+from videofeed.utils import detect_host_ip
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
@@ -32,14 +33,28 @@ logger = logging.getLogger('video-api-server')
 # Create FastAPI app
 app = FastAPI(title="Video Feed API")
 
-# Configure CORS middleware to allow cross-origin requests
+# Get host IP for CORS configuration
+host_ip = detect_host_ip()
+
+# Configure CORS middleware with restricted origins
+allowed_origins = [
+    "http://localhost:8080",
+    "http://127.0.0.1:8080",
+    f"http://{host_ip}:8080",
+    "http://localhost:3000",  # If you have a separate frontend
+    "http://127.0.0.1:3000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins - replace with specific origins in production
+    allow_origins=allowed_origins,  # ✅ Restricted to specific origins
     allow_credentials=True,
-    allow_methods=["*"],  # Allow all methods
-    allow_headers=["*"],  # Allow all headers
+    allow_methods=["GET", "POST", "DELETE", "PUT"],  # ✅ Specific methods only
+    allow_headers=["Content-Type", "Authorization", "Cookie"],  # ✅ Specific headers
+    max_age=3600,  # Cache preflight requests for 1 hour
 )
+
+logger.info(f"CORS configured for origins: {allowed_origins}")
 
 # Configure templates
 templates_path = os.path.join(os.path.dirname(__file__), "templates")
@@ -154,18 +169,54 @@ async def recordings_page(request: Request):
 
 @app.get("/recordings/{file_path:path}")
 async def serve_recording_file(file_path: str):
-    """Serve a recording file (video or thumbnail)."""
+    """Serve a recording file (video or thumbnail) with security checks."""
+    from pathlib import Path
+    
     global recordings_directory
     
     if not recordings_directory:
         raise HTTPException(status_code=404, detail="Recording directory not configured")
     
-    file_full_path = os.path.join(recordings_directory, file_path)
-    
-    if not os.path.exists(file_full_path):
-        raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
-    
-    return FileResponse(file_full_path)
+    try:
+        # Convert to Path objects and resolve to absolute paths
+        recordings_path = Path(recordings_directory).resolve()
+        requested_path = (recordings_path / file_path).resolve()
+        
+        # ✅ CRITICAL: Ensure requested path is within recordings directory
+        # This prevents path traversal attacks like "../../../etc/passwd"
+        if not requested_path.is_relative_to(recordings_path):
+            logger.warning(f"Path traversal attempt blocked: {file_path}")
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Check if file exists
+        if not requested_path.exists():
+            raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
+        
+        # Check if it's a file (not a directory)
+        if not requested_path.is_file():
+            raise HTTPException(status_code=403, detail="Not a file")
+        
+        # ✅ Validate file extension (only allow expected types)
+        allowed_extensions = {'.mp4', '.jpg', '.jpeg', '.png', '.webm', '.enc'}
+        if requested_path.suffix.lower() not in allowed_extensions:
+            logger.warning(f"Unauthorized file type access attempt: {requested_path.suffix}")
+            raise HTTPException(status_code=403, detail="File type not allowed")
+        
+        # Log access for audit
+        logger.info(f"File access: {file_path}")
+        
+        return FileResponse(requested_path)
+        
+    except ValueError as e:
+        # is_relative_to can raise ValueError
+        logger.error(f"Path validation error: {e}")
+        raise HTTPException(status_code=403, detail="Invalid path")
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        logger.error(f"Error serving file {file_path}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/status")
 async def get_status(feed: Optional[str] = None):

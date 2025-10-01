@@ -17,12 +17,26 @@ This document provides **ready-to-implement** code for securing your SentriX sur
 
 ---
 
-## Updates status 
+## Updates Status
 
-Completed:
+### Completed (2025-10-01)
 
-✅ Secured .gitignore
-✅ Changed default bind to localhost
+✅ **Secured .gitignore** - Added certificates, recordings, logs
+✅ **Changed default bind to localhost** - Restricted network exposure
+✅ **Fixed CORS policy** - Restricted to specific origins only
+✅ **Fixed path traversal vulnerability** - Added path validation and file type whitelist
+
+### In Progress
+
+⏳ Authentication middleware for all endpoints
+⏳ Rate limiting on auth endpoint
+
+### Pending
+
+⏸️ HTTPS support for web dashboard
+⏸️ File encryption at rest
+⏸️ Session-based authentication
+⏸️ Credential rotation mechanism
 
 ## Quick Security Fixes
 
@@ -447,13 +461,13 @@ def require_rate_limit(max_requests: int = 10, window: int = 60):
 
 ---
 
-## CORS Policy Fix
+## CORS Policy Fix ✅ COMPLETED
 
 ### Update CORS Configuration
 
-**File: `video-feed/videofeed/visualizer.py`**
+**File: `video-feed/videofeed/visualizer.py`** ✅ **IMPLEMENTED 2025-10-01**
 
-Replace the CORS middleware section (lines 36-42) with:
+~~Replace the CORS middleware section (lines 36-42) with:~~ **DONE:**
 
 ```python
 from videofeed.utils import detect_host_ip
@@ -484,13 +498,13 @@ logger.info(f"CORS configured for origins: {allowed_origins}")
 
 ---
 
-## Path Traversal Fix
+## Path Traversal Fix ✅ COMPLETED
 
 ### Secure File Serving
 
-**File: `video-feed/videofeed/visualizer.py`**
+**File: `video-feed/videofeed/visualizer.py`** ✅ **IMPLEMENTED 2025-10-01**
 
-Replace the `serve_recording_file` function (lines 155-168) with:
+~~Replace the `serve_recording_file` function (lines 155-168) with:~~ **DONE:**
 
 ```python
 from pathlib import Path
