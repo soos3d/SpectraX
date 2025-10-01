@@ -7,8 +7,8 @@ cameras:
 
 # Network settings
 network:
-  bind: "0.0.0.0"  # Listen on all interfaces
-  api_port: 3333    # API port for path discovery
+  bind: "127.0.0.1"  # ✅ SECURE: Localhost only (change to "0.0.0.0" if you need LAN access)
+  api_port: 3333     # API port for path discovery
 
 # Object detection settings
 detection:
@@ -22,7 +22,7 @@ detection:
 
 # Recording settings
 recording:
-  enabled: true
+  enabled: false
   min_confidence: 0.5  # Minimum confidence to trigger recording
   pre_buffer_seconds: 10  # Seconds to record before detection
   post_buffer_seconds: 10  # Seconds to record after last detection
