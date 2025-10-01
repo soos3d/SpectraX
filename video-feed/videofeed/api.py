@@ -22,11 +22,16 @@ class RecordingsAPI:
             db_path: Path to SQLite database file (if creating new connection)
             db_connection: Existing database connection to reuse
         """
-        self.db_path = db_path
+        # Ensure path is expanded if it contains ~ or $HOME
+        if db_path:
+            self.db_path = os.path.expanduser(db_path)
+        else:
+            self.db_path = db_path
+            
         self.db_conn = db_connection
         self._owns_connection = db_connection is None
         
-        if self._owns_connection and db_path:
+        if self._owns_connection and self.db_path:
             self._init_connection()
         
     def _init_connection(self):

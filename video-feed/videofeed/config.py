@@ -254,8 +254,14 @@ class SurveillanceConfig:
         return self.get_recording_config().get('max_storage_gb', 10.0)
     
     def get_recordings_directory(self) -> str:
-        """Get recordings directory."""
-        return self.get_recording_config().get('recordings_dir', '~/video-feed-recordings')
+        """Get recordings directory.
+        
+        Returns:
+            str: Path to recordings directory, with ~ expanded to user's home directory
+        """
+        path = self.get_recording_config().get('recordings_dir', '~/video-feed-recordings')
+        # Ensure the path is expanded
+        return os.path.expanduser(path)
     
     def get_record_objects(self) -> list:
         """Get list of objects to record.

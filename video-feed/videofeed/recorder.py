@@ -44,11 +44,21 @@ class RecordingManager:
             codec: Video codec to use
             max_storage_gb: Maximum storage space in gigabytes
         """
-        # Set up paths
-        self.recordings_dir = Path(recordings_dir or os.path.expanduser("~/video-feed-recordings"))
+        # Set up paths - ensure proper expansion of ~ to home directory
+        if recordings_dir:
+            # Expand user path if it contains ~ or $HOME
+            self.recordings_dir = Path(os.path.expanduser(recordings_dir))
+        else:
+            self.recordings_dir = Path(os.path.expanduser("~/video-feed-recordings"))
+            
         self.recordings_dir.mkdir(exist_ok=True, parents=True)
+        logger.info(f"Using recordings directory: {self.recordings_dir} (absolute: {self.recordings_dir.absolute()})")
         
-        self.db_path = db_path or str(self.recordings_dir / "recordings.db")
+        # Set up database path
+        if db_path:
+            self.db_path = os.path.expanduser(db_path)
+        else:
+            self.db_path = str(self.recordings_dir / "recordings.db")
         
         # Recording settings
         self.pre_detection_buffer = pre_detection_buffer
