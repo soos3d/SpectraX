@@ -1,88 +1,77 @@
-altair==5.5.0
-annotated-types==0.7.0
-anyio==4.9.0
-asyncio==3.4.3
-attrs==25.3.0
-backports.tarfile==1.2.0
-blinker==1.9.0
-cachetools==5.5.2
-certifi==2025.4.26
-charset-normalizer==3.4.2
-click==8.1.8
-contourpy==1.3.2
-cycler==0.12.1
-defusedxml==0.7.1
-fastapi==0.115.12
-filelock==3.18.0
-fonttools==4.57.0
-fsspec==2025.3.2
-gitdb==4.0.12
-GitPython==3.1.44
-h11==0.16.0
-idna==3.10
-importlib_metadata==8.7.0
-jaraco.classes==3.4.0
-jaraco.context==6.0.1
-jaraco.functools==4.1.0
-Jinja2==3.1.6
-jsonschema==4.23.0
-jsonschema-specifications==2025.4.1
-keyring==25.6.0
-kiwisolver==1.4.8
-markdown-it-py==3.0.0
-MarkupSafe==3.0.2
-matplotlib==3.10.3
-mdurl==0.1.2
-more-itertools==10.7.0
-mpmath==1.3.0
-narwhals==1.37.1
-networkx==3.4.2
-numpy==2.2.5
-opencv-python==4.11.0.86
-opencv-python-headless==4.11.0.86
-packaging==24.2
-pandas==2.2.3
-pillow==11.2.1
-protobuf==6.30.2
-psutil==7.0.0
-py-cpuinfo==9.0.0
-pyarrow==20.0.0
-pydantic==2.11.4
-pydantic_core==2.33.2
-pydeck==0.9.1
-Pygments==2.19.1
-pyparsing==3.2.3
-python-dateutil==2.9.0.post0
-pytz==2025.2
-PyYAML==6.0.2
-qrcode==8.2
-referencing==0.36.2
-requests==2.32.3
-rich==14.0.0
-rpds-py==0.24.0
-scipy==1.15.3
-seaborn==0.13.2
-setuptools==80.3.1
-shellingham==1.5.4
-six==1.17.0
-smmap==5.0.2
-sniffio==1.3.1
-starlette==0.46.2
-streamlit==1.45.0
-supervision==0.26.1
-sympy==1.14.0
-tenacity==9.1.2
-toml==0.10.2
-torch==2.7.0
-torchvision==0.22.0
-tornado==6.4.2
-tqdm==4.67.1
-typer==0.15.3
-typing-inspection==0.4.0
-typing_extensions==4.13.2
-tzdata==2025.2
-ultralytics==8.3.129
-ultralytics-thop==2.0.14
-urllib3==2.4.0
-uvicorn==0.34.2
-zipp==3.21.0
+# SentriX Surveillance System - Core Dependencies
+# Optimized requirements file (cleaned up 2025-10-02)
+
+# ============================================================
+# Core Framework & CLI
+# ============================================================
+typer==0.15.3                    # CLI framework
+PyYAML==6.0.2                    # Configuration management
+keyring==25.6.0                  # Secure credential storage
+
+# ============================================================
+# Web Server & API
+# ============================================================
+fastapi==0.115.12                # Web framework
+uvicorn==0.34.2                  # ASGI server
+Jinja2==3.1.6                    # Template engine
+starlette==0.46.2                # FastAPI dependency
+
+# ============================================================
+# Computer Vision & Object Detection
+# ============================================================
+opencv-python-headless==4.11.0.86  # Video processing (headless for servers)
+ultralytics==8.3.129             # YOLO object detection
+supervision==0.26.1              # Detection annotations and utilities
+torch==2.7.0                     # PyTorch (YOLO dependency)
+torchvision==0.22.0              # Vision models (YOLO dependency)
+Pillow==11.2.1                   # Image processing
+
+# ============================================================
+# Data Processing & Analysis
+# ============================================================
+numpy==2.2.5                     # Numerical computing
+pydantic==2.11.4                 # Data validation
+
+# ============================================================
+# Utilities
+# ============================================================
+requests==2.32.3                 # HTTP client
+tqdm==4.67.1                     # Progress bars
+psutil==7.0.0                    # System monitoring
+
+# ============================================================
+# Dependencies (automatically installed with above packages)
+# ============================================================
+# The following are dependencies of the packages above and will be
+# installed automatically. Listed here for reference and version pinning.
+
+annotated-types==0.7.0           # Pydantic dependency
+anyio==4.9.0                     # FastAPI dependency
+attrs==25.3.0                    # Supervision dependency
+certifi==2025.4.26               # Requests dependency
+charset-normalizer==3.4.2        # Requests dependency
+click==8.1.8                     # Typer dependency
+filelock==3.18.0                 # Torch dependency
+h11==0.16.0                      # Uvicorn dependency
+idna==3.10                       # Requests dependency
+MarkupSafe==3.0.2                # Jinja2 dependency
+packaging==24.2                  # General dependency
+pydantic_core==2.33.2            # Pydantic dependency
+python-dateutil==2.9.0.post0     # General dependency
+setuptools==80.3.1               # Build tools
+shellingham==1.5.4               # Typer dependency
+sniffio==1.3.1                   # FastAPI dependency
+typing_extensions==4.13.2        # Pydantic dependency
+ultralytics-thop==2.0.14         # Ultralytics dependency
+urllib3==2.4.0                   # Requests dependency
+
+# ============================================================
+# Removed Dependencies (no longer needed)
+# ============================================================
+# streamlit - Removed (UI replaced with FastAPI templates)
+# altair - Removed (Streamlit dependency)
+# qrcode - Removed (not used in codebase)
+# asyncio - Removed (built-in to Python 3.7+)
+# opencv-python - Removed (using headless version)
+# matplotlib, seaborn, pandas - Removed (not used for core functionality)
+# GitPython, rich, markdown-it-py - Removed (not essential)
