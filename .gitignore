@@ -180,5 +180,40 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-# yolo models
+# YOLO models
 *.pt
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Thumbnails
+._*
+
+# Temporary files
+*~
+*.swp
+*.swo
+*.tmp
+
+# IDE
+.vscode/
+.idea/
+*.sublime-*
+
+# Recordings and media
+video-feed-recordings/
+recordings/
+*.mp4
+*.avi
+*.mkv
+*.jpg
+*.jpeg
+*.png
+!docs/**/*.png
+!docs/**/*.jpg
+
+# Obsolete directories (removed from codebase)
+cli-only/
+basic-ui/streamlit_ui.py
