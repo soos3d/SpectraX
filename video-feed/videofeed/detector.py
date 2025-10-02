@@ -15,6 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 import uuid
 
 from videofeed.recorder import RecordingManager
+from videofeed.detector_config import DetectorConfig
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
@@ -27,34 +28,30 @@ class RTSPObjectDetector:
     def __init__(
         self,
         source_url: str,
-        model_path: str = "yolov8n.pt",
-        confidence: float = 0.5,
-        buffer_size: int = 10,
-        reconnect_interval: int = 5,
-        resolution: Tuple[int, int] = (640, 480),
+        config: Optional[DetectorConfig] = None,
         recording_manager: Optional[RecordingManager] = None
     ):
         """Initialize the RTSP object detector.
         
         Args:
             source_url: RTSP source URL with credentials
-            model_path: Path to YOLO model or model name
-            confidence: Detection confidence threshold
-            buffer_size: Frame buffer size
-            reconnect_interval: Seconds between reconnection attempts
-            resolution: Output resolution (width, height)
+            config: DetectorConfig instance (uses defaults if None)
+            recording_manager: Optional recording manager for event-based recording
         """
         self.source_url = source_url
-        self.model_path = model_path
-        self.confidence = confidence
-        self.buffer_size = buffer_size
-        self.reconnect_interval = reconnect_interval
-        self.resolution = resolution
+        self.config = config or DetectorConfig()
+        
+        # Extract config values for convenience
+        self.model_path = self.config.model_path
+        self.confidence = self.config.confidence
+        self.buffer_size = self.config.buffer_size
+        self.reconnect_interval = self.config.reconnect_interval
+        self.resolution = self.config.resolution
         
         # Initialize components
         self.model = None
         self.cap = None
-        self.frame_buffer = queue.Queue(maxsize=buffer_size)
+        self.frame_buffer = queue.Queue(maxsize=self.buffer_size)
         self.latest_frame = None
         self.running = False
         self.processing_thread = None
@@ -66,16 +63,9 @@ class RTSPObjectDetector:
         self.last_fps_update = 0
         self.detections = []
         
-        # Supervision annotators for clean visualization
-        self.box_annotator = sv.BoxAnnotator(
-            thickness=2,
-            color=sv.Color.GREEN
-        )
-        self.label_annotator = sv.LabelAnnotator(
-            text_position=sv.Position.TOP_LEFT,
-            text_thickness=1,
-            text_scale=0.5
-        )
+        # Supervision annotators from config
+        self.box_annotator = self.config.create_box_annotator()
+        self.label_annotator = self.config.create_label_annotator()
         
         # Recording
         self.recording_manager = recording_manager
@@ -269,13 +259,16 @@ class RTSPObjectDetector:
         # Convert YOLO results to Supervision Detections format
         detections_sv = sv.Detections.from_ultralytics(result)
         
+        # Apply filters using Supervision's native capabilities
+        detections_sv = self._apply_filters(detections_sv, result.names)
+        
         # Build labels for each detection
         labels = [
             f"{result.names[class_id]} {confidence:.2f}"
             for class_id, confidence in zip(detections_sv.class_id, detections_sv.confidence)
         ]
         
-        # Annotate frame using Supervision (cleaner than manual cv2 drawing)
+        # Annotate frame using Supervision
         annotated_frame = self.box_annotator.annotate(
             scene=frame.copy(),
             detections=detections_sv
@@ -291,7 +284,7 @@ class RTSPObjectDetector:
         cv2.putText(annotated_frame, fps_text, (10, 30), 
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
         
-        # Convert Supervision detections to legacy format for compatibility
+        # Convert to legacy format for backward compatibility with recording manager
         detections_list = self._sv_to_legacy_format(detections_sv, result.names)
         
         # Calculate max confidence for recording trigger
@@ -307,6 +300,39 @@ class RTSPObjectDetector:
             )
         
         return annotated_frame, detections_list
+    
+    def _apply_filters(self, detections: sv.Detections, class_names: Dict) -> sv.Detections:
+        """Apply configured filters to detections using Supervision's native filtering.
+        
+        Args:
+            detections: Supervision Detections object
+            class_names: Dictionary mapping class IDs to names
+        
+        Returns:
+            Filtered Detections object
+        """
+        if len(detections) == 0:
+            return detections
+        
+        # Filter by class if specified in config
+        if self.config.filter_classes:
+            # Get class IDs for the specified class names
+            allowed_class_ids = [
+                class_id for class_id, name in class_names.items() 
+                if name in self.config.filter_classes
+            ]
+            if allowed_class_ids:
+                detections = detections[np.isin(detections.class_id, allowed_class_ids)]
+        
+        # Filter by minimum area if specified
+        if self.config.min_detection_area is not None:
+            detections = detections[detections.area > self.config.min_detection_area]
+        
+        # Filter by maximum area if specified
+        if self.config.max_detection_area is not None:
+            detections = detections[detections.area < self.config.max_detection_area]
+        
+        return detections
     
     def _sv_to_legacy_format(self, detections_sv: sv.Detections, class_names: Dict) -> List[Dict]:
         """Convert Supervision Detections to legacy format for backward compatibility.
@@ -376,41 +402,40 @@ class DetectorManager:
         
     def add_detector(self, 
                     source_url: str, 
-                    model_path: str = "yolov8n.pt",
-                    confidence: float = 0.5, 
-                    resolution: Tuple[int, int] = (640, 480),
+                    config: Optional[DetectorConfig] = None,
                     enable_recording: bool = True) -> str:
         """Add a new detector for a stream.
         
         Args:
             source_url: RTSP source URL with credentials
-            model_path: Path to YOLO model or model name
-            confidence: Detection confidence threshold
-            resolution: Output resolution (width, height)
+            config: DetectorConfig instance (uses defaults if None)
+            enable_recording: Whether to enable recording for this detector
         
         Returns:
             Detector ID (UUID)
         """
         detector_id = str(uuid.uuid4())
         
+        # Use default config if not provided
+        if config is None:
+            config = DetectorConfig()
+        
         # Reuse model if already loaded
-        if model_path not in self.model_cache:
-            logger.info(f"Loading model {model_path} for the first time")
-            model = YOLO(model_path)
-            self.model_cache[model_path] = model
+        if config.model_path not in self.model_cache:
+            logger.info(f"Loading model {config.model_path} for the first time")
+            model = YOLO(config.model_path)
+            self.model_cache[config.model_path] = model
         
         with self._lock:
             detector = RTSPObjectDetector(
                 source_url=source_url,
-                model_path=model_path,
-                confidence=confidence,
-                resolution=resolution,
+                config=config,
                 recording_manager=self.recording_manager if enable_recording else None
             )
             
             # Set model directly if already loaded
-            if model_path in self.model_cache:
-                detector.model = self.model_cache[model_path]
+            if config.model_path in self.model_cache:
+                detector.model = self.model_cache[config.model_path]
             else:
                 detector.load_model()
             

@@ -182,6 +182,7 @@ class SurveillanceSystem:
             
             # Import here to avoid circular imports
             from videofeed.detector import DetectorManager
+            from videofeed.detector_config import DetectorConfig
             from videofeed.visualizer import app, set_detector_manager
             from videofeed.recorder import RecordingManager
             import uvicorn
@@ -204,13 +205,21 @@ class SurveillanceSystem:
                 # Initialize detector manager
                 detector_manager = DetectorManager(recording_manager=recording_manager)
                 
+                # Create detector configuration from surveillance config
+                # This pulls all settings from surveillance.yml including:
+                # - Model, confidence, resolution
+                # - Stream buffer and reconnect settings
+                # - Detection filters (classes, min/max area)
+                # - Visual appearance (box color, label style)
+                from videofeed.config import SurveillanceConfig
+                surveillance_cfg = SurveillanceConfig(Path("surveillance.yml"))
+                detector_config = DetectorConfig.from_surveillance_config(surveillance_cfg)
+                
                 # Add detectors for each URL
                 for url in rtsp_urls:
                     detector_manager.add_detector(
                         source_url=url,
-                        model_path=model,
-                        confidence=confidence,
-                        resolution=resolution,
+                        config=detector_config,
                         enable_recording=enable_recording
                     )
                 
