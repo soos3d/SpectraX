@@ -106,10 +106,19 @@ class SurveillanceSystem:
         typer.echo("⏳ Starting MediaMTX streaming server...")
         
         # Wait for server to start
-        try:
-            self.mediamtx_process.wait(timeout=2)
-        except subprocess.TimeoutExpired:
-            pass  # Expected: server is running
+        import time
+        time.sleep(1)  # Give it a moment to start
+        
+        # Check if process is still running
+        if self.mediamtx_process.poll() is not None:
+            # Process has terminated
+            stdout, stderr = self.mediamtx_process.communicate()
+            typer.secho("❌ MediaMTX failed to start!", fg=typer.colors.RED, bold=True)
+            if stdout:
+                typer.echo(f"STDOUT: {stdout.decode()}")
+            if stderr:
+                typer.echo(f"STDERR: {stderr.decode()}")
+            raise typer.Exit(1)
             
         # Store configuration
         self.config = {
@@ -206,13 +215,14 @@ class SurveillanceSystem:
                 detector_manager = DetectorManager(recording_manager=recording_manager)
                 
                 # Create detector configuration from surveillance config
-                # This pulls all settings from surveillance.yml including:
+                # This pulls all settings from config/surveillance.yml including:
                 # - Model, confidence, resolution
                 # - Stream buffer and reconnect settings
                 # - Detection filters (classes, min/max area)
                 # - Visual appearance (box color, label style)
                 from videofeed.config import SurveillanceConfig
-                surveillance_cfg = SurveillanceConfig(Path("surveillance.yml"))
+                config_path = Path(__file__).parent.parent / "config" / "surveillance.yml"
+                surveillance_cfg = SurveillanceConfig(config_path)
                 detector_config = DetectorConfig.from_surveillance_config(surveillance_cfg)
                 
                 # Add detectors for each URL
@@ -336,9 +346,13 @@ class SurveillanceSystem:
 
 @app.command()
 def config(
-    config_file: Path = typer.Option("surveillance.yml", "--config", "-c", help="Configuration file path")
+    config_file: Path = typer.Option(None, "--config", "-c", help="Configuration file path")
 ):
     """Start surveillance system using a configuration file."""
+    
+    # Use default config path if not provided
+    if config_file is None:
+        config_file = Path(__file__).parent.parent / "config" / "surveillance.yml"
     
     # Load configuration using unified config manager
     config = SurveillanceConfig(config_file)

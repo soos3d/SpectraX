@@ -10,6 +10,10 @@ __pycache__/
 server.crt  
 server.key
 mediamtx.yml
+
+# YOLO Models (large files)
+video-feed/models/*.pt
+*.pt
 # Distribution / packaging
 .Python
 build/

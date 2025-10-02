@@ -1,0 +1,148 @@
+# ============================================================
+# SentriX Surveillance System Configuration
+# ============================================================
+# This is the ONLY file you need to edit to configure your system.
+# All settings are documented below with examples and recommendations.
+
+# ============================================================
+# CAMERA STREAMS
+# ============================================================
+# List of camera stream paths (e.g., video/front-door, video/backyard)
+cameras:
+  - video/iphone
+
+# ============================================================
+# NETWORK SETTINGS
+# ============================================================
+network:
+  # Bind address for all services
+  # "127.0.0.1" = localhost only (secure, local access)
+  # "0.0.0.0" = all interfaces (LAN access, less secure)
+  bind: "127.0.0.1"
+  
+  # API port for camera path discovery
+  # Use for custom web app
+  api_port: 3333
+
+# ============================================================
+# OBJECT DETECTION SETTINGS
+# ============================================================
+detection:
+  # Enable/disable object detection
+  enabled: true
+  
+  # Web dashboard port
+  # Use for custom web app - this is to display the AI overlay
+  port: 8080
+  
+  # YOLO model to use
+  # Options: yolov8n.pt (fastest), yolov8s.pt, yolov8m.pt, yolov8l.pt (most accurate)
+  model: "yolov8l.pt"
+  
+  # Minimum confidence threshold (0.0 - 1.0)
+  # Lower = more detections (may include false positives)
+  # Higher = fewer detections (may miss some objects)
+  confidence: 0.4
+  
+  # Video resolution for processing
+  # Lower resolution = faster processing, less detail
+  # Higher resolution = slower processing, more detail
+  resolution:
+    width: 960
+    height: 540
+  
+  # Stream processing settings
+  # Max settings:
+  # buffer_size: 100
+  # reconnect_interval: 10
+  stream:
+    buffer_size: 10          # Frame buffer size (higher = smoother but more latency)
+    reconnect_interval: 5    # Seconds between reconnection attempts
+  
+  # Detection filtering
+  filters:
+    # Only detect these object classes (empty list = detect ALL objects)
+    # Common classes: person, car, truck, bus, motorcycle, bicycle, dog, cat, bird
+    # IMPORTANT: Empty [] = detect everything, ["person"] = only detect people
+    classes: []  # Leave empty to detect all objects
+    
+    # Filter by detection size (in pixels)
+    min_area: null  # Minimum detection area (null = no limit)
+    max_area: null  # Maximum detection area (null = no limit)
+    # Example: min_area: 1000 to ignore tiny detections
+    # Example: max_area: 500000 to ignore huge detections
+
+# ============================================================
+# VISUAL APPEARANCE
+# ============================================================
+# Customize how detections are displayed
+appearance:
+  # Bounding box settings
+  box:
+    thickness: 2     # Box line thickness (1-5)
+    color: "yellow"   # Color: "green", "red", "blue", "yellow", "white", "black", "roboflow"
+  
+  # Label settings
+  label:
+    text_scale: 0.5        # Label text size (0.3-1.0)
+    text_thickness: 1      # Label text thickness (1-3)
+    text_padding: 10       # Padding around label text (pixels)
+    position: "top_left"   # Label position: top_left, top_center, top_right, etc.
+    border_radius: 0       # Label background border radius (0 = square)
+
+# ============================================================
+# RECORDING SETTINGS
+# ============================================================
+recording:
+  # Enable/disable event-based recording
+  enabled: true
+  
+  # Minimum confidence to trigger recording (0.0 - 1.0)
+  min_confidence: 0.5
+  
+  # Buffer settings (seconds)
+  pre_buffer_seconds: 10   # Record X seconds BEFORE detection
+  post_buffer_seconds: 10  # Record X seconds AFTER last detection
+  
+  # Storage management
+  max_storage_gb: 10.0                    # Maximum storage before cleanup (in GB)
+  recordings_dir: "~/video-feed-recordings"  # Where to save recordings (relative to current directory)
+  
+  # Only record when these objects are detected
+  # NOTE: This is SEPARATE from detection.filters.classes
+  # - detection.filters.classes = what to DETECT (empty = detect all)
+  # - record_objects = what to RECORD (empty = record all detections)
+  # Empty list = record all detections
+  # Example: ["person", "car"] = only record people and cars
+  record_objects: ["person", "car", "dog", "cat", "knife", "gun"]
+
+# ============================================================
+# SECURITY SETTINGS
+# ============================================================
+security:
+  # Enable RTSPS (encrypted RTSP) for camera streams
+  use_tls: true
+  
+  # Custom TLS certificates (leave empty to use defaults)
+  tls_key: ""   # Path to private key file
+  tls_cert: ""  # Path to certificate file
+
+# ============================================================
+# ADVANCED SETTINGS (Optional)
+# ============================================================
+# Uncomment and modify these settings for advanced use cases
+
+# advanced:
+#   # Enable debug logging
+#   debug: false
+#   
+#   # Custom MediaMTX settings
+#   mediamtx:
+#     rtsp_port: 8554      # Unencrypted RTSP port
+#     rtsps_port: 8322     # Encrypted RTSPS port
+#     hls_port: 8888       # HLS streaming port
+#   
+#   # Performance tuning
+#   performance:
+#     max_detectors: 10    # Maximum concurrent detectors
+#     thread_pool_size: 3  # Thread pool size for processing

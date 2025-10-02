@@ -16,6 +16,7 @@ import uuid
 
 from videofeed.recorder import RecordingManager
 from videofeed.detector_config import DetectorConfig
+from videofeed.utils import resolve_model_path
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
@@ -42,7 +43,7 @@ class RTSPObjectDetector:
         self.config = config or DetectorConfig()
         
         # Extract config values for convenience
-        self.model_path = self.config.model_path
+        self.model_path = resolve_model_path(self.config.model_path)
         self.confidence = self.config.confidence
         self.buffer_size = self.config.buffer_size
         self.reconnect_interval = self.config.reconnect_interval
@@ -420,11 +421,14 @@ class DetectorManager:
         if config is None:
             config = DetectorConfig()
         
+        # Resolve model path to use package models directory
+        resolved_model_path = resolve_model_path(config.model_path)
+        
         # Reuse model if already loaded
-        if config.model_path not in self.model_cache:
-            logger.info(f"Loading model {config.model_path} for the first time")
-            model = YOLO(config.model_path)
-            self.model_cache[config.model_path] = model
+        if resolved_model_path not in self.model_cache:
+            logger.info(f"Loading model {resolved_model_path} for the first time")
+            model = YOLO(resolved_model_path)
+            self.model_cache[resolved_model_path] = model
         
         with self._lock:
             detector = RTSPObjectDetector(
@@ -434,8 +438,8 @@ class DetectorManager:
             )
             
             # Set model directly if already loaded
-            if config.model_path in self.model_cache:
-                detector.model = self.model_cache[config.model_path]
+            if resolved_model_path in self.model_cache:
+                detector.model = self.model_cache[resolved_model_path]
             else:
                 detector.load_model()
             
