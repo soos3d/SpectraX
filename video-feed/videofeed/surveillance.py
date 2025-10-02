@@ -103,7 +103,7 @@ class SurveillanceSystem:
             
         # Launch MediaMTX
         self.mediamtx_process = launch_mediamtx(config_path)
-        typer.echo("⏳ Starting MediaMTX streaming server...")
+        typer.echo("⏳ Starting streaming server...")
         
         # Wait for server to start
         import time
@@ -129,7 +129,7 @@ class SurveillanceSystem:
             "use_rtsps": tls_key is not None and tls_cert is not None
         }
         
-        # Start API server if port is specified
+        # Start API server if port is specified (silent)
         if api_port:
             self.start_api_server(api_port)
         
@@ -148,9 +148,10 @@ class SurveillanceSystem:
         self.api_thread = threading.Thread(target=self.api_server.serve_forever, daemon=True)
         self.api_thread.start()
         
-        typer.echo(f"🔍 API server started on port {port}")
-        typer.echo(f"  • Local: http://127.0.0.1:{port}/paths")
-        typer.echo(f"  • Network: http://{self.config['host_ip']}:{port}/paths")
+        # API server starts silently - will be shown in final status
+        # typer.echo(f"🔍 API server started on port {port}")
+        # typer.echo(f"  • Local: http://127.0.0.1:{port}/paths")
+        # typer.echo(f"  • Network: http://{self.config['host_ip']}:{port}/paths")
         
     def start_detector(
         self,
@@ -187,7 +188,8 @@ class SurveillanceSystem:
                     url = f"rtsp://{self.config['creds']['read_user']}:{self.config['creds']['read_pass']}@{self.config['host_ip']}:8554/{path}"
                 rtsp_urls.append(url)
                 
-            typer.echo(f"🎯 Starting object detection for {len(rtsp_urls)} streams...")
+            # Silent - will show in final status
+            # typer.echo(f"🎯 Starting object detection for {len(rtsp_urls)} streams...")
             
             # Import here to avoid circular imports
             from videofeed.detector import DetectorManager
@@ -200,7 +202,8 @@ class SurveillanceSystem:
                 # Initialize recording manager if enabled
                 recording_manager = None
                 if enable_recording:
-                    typer.echo(f"📹 Initializing recording manager...")
+                    # Silent initialization - will show in final status
+                    # typer.echo(f"📹 Initializing recording manager...")
                     recording_manager = RecordingManager(
                         recordings_dir=recordings_dir,
                         min_confidence=recording_min_confidence,
@@ -209,7 +212,7 @@ class SurveillanceSystem:
                         record_objects=record_objects
                     )
                     recording_manager.start()
-                    typer.echo(f"📹 Recording enabled - clips will be saved to {recording_manager.recordings_dir}")
+                    # typer.echo(f"📹 Recording enabled - clips will be saved to {recording_manager.recordings_dir}")
                 
                 # Initialize detector manager
                 detector_manager = DetectorManager(recording_manager=recording_manager)
@@ -254,69 +257,96 @@ class SurveillanceSystem:
         
     def print_status(self):
         """Print system status and connection information."""
-        typer.echo("\n" + "="*60)
-        typer.secho("🎥 SURVEILLANCE SYSTEM ACTIVE", fg=typer.colors.GREEN, bold=True)
-        typer.echo("="*60 + "\n")
+        typer.echo("\n" + "="*70)
+        typer.secho("🎥 SURVEILLANCE SYSTEM READY", fg=typer.colors.GREEN, bold=True)
+        typer.echo("="*70 + "\n")
         
-        # Print stream paths
-        typer.secho("📹 Active Streams:", fg=typer.colors.YELLOW, bold=True)
-        for path in self.config["paths"]:
-            typer.echo(f"  • {path}")
-            
+        # Print active cameras
+        typer.secho("📹 ACTIVE CAMERAS", fg=typer.colors.YELLOW, bold=True)
+        for i, path in enumerate(self.config["paths"], 1):
+            # Extract friendly name from path (e.g., "video/iphone" -> "iphone")
+            camera_name = path.split('/')[-1]
+            typer.echo(f"  {i}. {camera_name} ({path})")
         typer.echo()
         
-        # Print publisher info (for cameras)
-        typer.secho("📱 Camera Connection (Publisher):", fg=typer.colors.CYAN, bold=True)
-        if self.config["use_rtsps"]:
-            typer.echo(f"  RTSPS URL: rtsps://{self.config['host_ip']}:8322/[stream-path]")
-        else:
-            typer.echo(f"  RTSP URL: rtsp://{self.config['host_ip']}:8554/[stream-path]")
+        # Print web dashboard (most important)
+        typer.secho("🌐 WEB DASHBOARD", fg=typer.colors.GREEN, bold=True)
+        typer.echo(f"  → http://{self.config['host_ip']}:8080")
+        typer.echo(f"     (Live view with AI detection)")
+        typer.echo()
+        
+        # Print camera publishing info
+        typer.secho("📱 PUBLISH FROM CAMERA", fg=typer.colors.CYAN, bold=True)
+        typer.echo("  Use these credentials in your camera app (e.g., Larix Broadcaster):")
+        typer.echo()
+        protocol = "rtsps" if self.config["use_rtsps"] else "rtsp"
+        port = "8322" if self.config["use_rtsps"] else "8554"
+        typer.echo(f"  Server:   {protocol}://{self.config['host_ip']}:{port}/[your-stream-path]")
         typer.echo(f"  Username: {self.config['creds']['publish_user']}")
         typer.echo(f"  Password: {self.config['creds']['publish_pass']}")
-        
+        typer.echo()
+        typer.secho(f"  Example: {protocol}://{self.config['host_ip']}:{port}/{self.config['paths'][0]}", 
+                   fg=typer.colors.BRIGHT_BLACK)
         typer.echo()
         
-        # Print viewer info
-        typer.secho("🖥️  Web Interfaces:", fg=typer.colors.GREEN, bold=True)
-        typer.echo(f"  Object Detection: http://{self.config['host_ip']}:8080")
-        typer.echo(f"  HLS Streams: http://{self.config['host_ip']}:8888/[stream-path]/index.m3u8")
-        if self.config.get("api_port"):
-            typer.echo(f"  Paths API: http://{self.config['host_ip']}:{self.config['api_port']}/paths")
-            
+        # Print viewer credentials
+        typer.secho("👀 VIEW STREAMS (VLC, OBS, etc.)", fg=typer.colors.MAGENTA, bold=True)
+        typer.echo("  Use these credentials to view streams:")
+        typer.echo()
+        typer.echo(f"  Username: {self.config['creds']['read_user']}")
+        typer.echo(f"  Password: {self.config['creds']['read_pass']}")
+        typer.echo()
+        # Show example for first camera
+        if self.config["paths"]:
+            camera_name = self.config["paths"][0].split('/')[-1]
+            if self.config["use_rtsps"]:
+                viewer_url = f"rtsps://{self.config['creds']['read_user']}:{self.config['creds']['read_pass']}@{self.config['host_ip']}:8322/{self.config['paths'][0]}"
+            else:
+                viewer_url = f"rtsp://{self.config['creds']['read_user']}:{self.config['creds']['read_pass']}@{self.config['host_ip']}:8554/{self.config['paths'][0]}"
+            typer.secho(f"  Example ({camera_name}): {viewer_url}", fg=typer.colors.BRIGHT_BLACK)
         typer.echo()
         
         # Print recording info if enabled
         if hasattr(self, 'recording_enabled') and self.recording_enabled:
-            typer.secho("📹 Recording:", fg=typer.colors.BLUE, bold=True)
-            typer.echo(f"  Status: Enabled")
-            typer.echo(f"  Pre-detection buffer: {self.recording_config['pre_buffer']} seconds")
-            typer.echo(f"  Post-detection buffer: {self.recording_config['post_buffer']} seconds")
-            typer.echo(f"  Minimum confidence: {self.recording_config['min_confidence']}")
-            if self.recording_config['recordings_dir']:
-                typer.echo(f"  Directory: {self.recording_config['recordings_dir']}")
+            typer.secho("📹 RECORDING", fg=typer.colors.BLUE, bold=True)
+            typer.echo(f"  Status:     ✓ Enabled")
+            typer.echo(f"  Directory:  {self.recording_config['recordings_dir']}")
+            typer.echo(f"  Buffer:     {self.recording_config['pre_buffer']}s before / {self.recording_config['post_buffer']}s after detection")
+            typer.echo(f"  Confidence: {self.recording_config['min_confidence']} minimum")
             
             # Show object filtering
             if self.recording_config['record_objects']:
-                typer.echo(f"  Recording objects: {', '.join(self.recording_config['record_objects'])}")
+                objects_str = ', '.join(self.recording_config['record_objects'])
+                typer.echo(f"  Objects:    {objects_str}")
             else:
-                typer.echo(f"  Recording objects: All objects")
-            typer.echo()
-        else:
-            typer.secho("📹 Recording: Disabled", fg=typer.colors.BRIGHT_BLACK)
+                typer.echo(f"  Objects:    All detected objects")
             typer.echo()
         
-        # Print secure viewer URLs
-        typer.secho("🔐 Secure Viewer URLs:", fg=typer.colors.MAGENTA, bold=True)
-        for path in self.config["paths"]:
-            if self.config["use_rtsps"]:
-                url = f"rtsps://{self.config['creds']['read_user']}:{self.config['creds']['read_pass']}@{self.config['host_ip']}:8322/{path}"
-            else:
-                url = f"rtsp://{self.config['creds']['read_user']}:{self.config['creds']['read_pass']}@{self.config['host_ip']}:8554/{path}"
-            typer.echo(f"  • {path}: {url}")
+        # Advanced URLs (collapsed)
+        typer.secho("🔗 ADVANCED", fg=typer.colors.BRIGHT_BLACK, bold=True)
+        
+        # All stream URLs with credentials
+        if len(self.config["paths"]) > 1:
+            typer.echo(f"  All stream URLs:")
+            for path in self.config["paths"]:
+                camera_name = path.split('/')[-1]
+                if self.config["use_rtsps"]:
+                    url = f"rtsps://{self.config['creds']['read_user']}:{self.config['creds']['read_pass']}@{self.config['host_ip']}:8322/{path}"
+                else:
+                    url = f"rtsp://{self.config['creds']['read_user']}:{self.config['creds']['read_pass']}@{self.config['host_ip']}:8554/{path}"
+                typer.echo(f"    • {camera_name}: {url}")
+            typer.echo()
+        
+        # HLS streaming
+        typer.echo(f"  HLS streaming: http://{self.config['host_ip']}:8888/[stream-path]/index.m3u8")
+        
+        # API endpoint
+        if self.config.get("api_port"):
+            typer.echo(f"  Paths API: http://{self.config['host_ip']}:{self.config['api_port']}/paths")
             
-        typer.echo("\n" + "="*60)
-        typer.secho("Press Ctrl+C to stop the surveillance system", fg=typer.colors.BRIGHT_BLACK)
-        typer.echo("="*60 + "\n")
+        typer.echo("\n" + "="*70)
+        typer.secho("Press Ctrl+C to stop", fg=typer.colors.BRIGHT_BLACK)
+        typer.echo("="*70 + "\n")
         
     def shutdown(self):
         """Shutdown all services."""
