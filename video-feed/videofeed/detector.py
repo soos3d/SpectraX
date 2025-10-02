@@ -9,6 +9,7 @@ from pathlib import Path
 import threading
 import queue
 from ultralytics import YOLO
+import supervision as sv
 import logging
 from concurrent.futures import ThreadPoolExecutor
 import uuid
@@ -64,6 +65,17 @@ class RTSPObjectDetector:
         self.frame_count = 0
         self.last_fps_update = 0
         self.detections = []
+        
+        # Supervision annotators for clean visualization
+        self.box_annotator = sv.BoxAnnotator(
+            thickness=2,
+            color=sv.Color.GREEN
+        )
+        self.label_annotator = sv.LabelAnnotator(
+            text_position=sv.Position.TOP_LEFT,
+            text_thickness=1,
+            text_scale=0.5
+        )
         
         # Recording
         self.recording_manager = recording_manager
@@ -250,61 +262,72 @@ class RTSPObjectDetector:
                 time.sleep(0.1)
                 
     def _process_results(self, frame: np.ndarray, results):
-        """Process YOLO results and draw on frame."""
-        detections = []
-        max_conf = 0
-        
+        """Process YOLO results using Supervision and annotate frame."""
         # Extract the first result (only one image processed at a time)
         result = results[0]
         
-        # Draw boxes and extract detection data
-        boxes = result.boxes
-        for box in boxes:
-            # Get box coordinates
-            x1, y1, x2, y2 = map(int, box.xyxy[0])
-            
-            # Get confidence and class
-            conf = float(box.conf[0])
-            cls = int(box.cls[0])
-            name = result.names[cls]
-            
-            # Track highest confidence
-            if conf > max_conf:
-                max_conf = conf
-            
-            # Save detection info
-            detection = {
-                "class": name,
-                "confidence": conf,
-                "bbox": [x1, y1, x2, y2]
-            }
-            detections.append(detection)
-            
-            # Draw on frame
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            
-            # Draw label
-            label = f"{name} {conf:.2f}"
-            (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
-            cv2.rectangle(frame, (x1, y1 - 20), (x1 + w, y1), (0, 255, 0), -1)
-            cv2.putText(frame, label, (x1, y1 - 5), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
+        # Convert YOLO results to Supervision Detections format
+        detections_sv = sv.Detections.from_ultralytics(result)
         
-        # Draw FPS
+        # Build labels for each detection
+        labels = [
+            f"{result.names[class_id]} {confidence:.2f}"
+            for class_id, confidence in zip(detections_sv.class_id, detections_sv.confidence)
+        ]
+        
+        # Annotate frame using Supervision (cleaner than manual cv2 drawing)
+        annotated_frame = self.box_annotator.annotate(
+            scene=frame.copy(),
+            detections=detections_sv
+        )
+        annotated_frame = self.label_annotator.annotate(
+            scene=annotated_frame,
+            detections=detections_sv,
+            labels=labels
+        )
+        
+        # Add FPS overlay
         fps_text = f"FPS: {self.fps}"
-        cv2.putText(frame, fps_text, (10, 30), 
+        cv2.putText(annotated_frame, fps_text, (10, 30), 
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
         
+        # Convert Supervision detections to legacy format for compatibility
+        detections_list = self._sv_to_legacy_format(detections_sv, result.names)
+        
+        # Calculate max confidence for recording trigger
+        max_conf = float(detections_sv.confidence.max()) if len(detections_sv) > 0 else 0
+        
         # Trigger recording if we have detections and a recording manager
-        if detections and self.recording_manager and max_conf > 0:
+        if detections_list and self.recording_manager and max_conf > 0:
             self.recording_manager.handle_detection(
                 self.detector_id, 
-                detections, 
+                detections_list, 
                 max_conf, 
-                frame.copy()
+                annotated_frame.copy()
             )
         
-        return frame, detections
+        return annotated_frame, detections_list
+    
+    def _sv_to_legacy_format(self, detections_sv: sv.Detections, class_names: Dict) -> List[Dict]:
+        """Convert Supervision Detections to legacy format for backward compatibility.
+        
+        Args:
+            detections_sv: Supervision Detections object
+            class_names: Dictionary mapping class IDs to names
+        
+        Returns:
+            List of detection dictionaries in legacy format
+        """
+        detections = []
+        for i in range(len(detections_sv)):
+            x1, y1, x2, y2 = detections_sv.xyxy[i]
+            detection = {
+                "class": class_names[detections_sv.class_id[i]],
+                "confidence": float(detections_sv.confidence[i]),
+                "bbox": [int(x1), int(y1), int(x2), int(y2)]
+            }
+            detections.append(detection)
+        return detections
         
     def get_frame_jpeg(self) -> bytes:
         """Get the latest processed frame as JPEG bytes."""
