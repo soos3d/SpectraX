@@ -4,9 +4,7 @@ import secrets
 import keyring
 from typing import Dict
 
-# Application constants
-APP_NAME = "video-feed"
-KEYCHAIN_SERVICE = f"{APP_NAME}-mediamtx"
+from .constants import APP_NAME, KEYCHAIN_SERVICE
 
 
 def rand_secret() -> str:

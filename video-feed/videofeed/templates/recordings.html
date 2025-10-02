@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Feed - Recordings</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .recording-card {
+            margin-bottom: 20px;
+            transition: transform 0.2s;
+        }
+        .recording-card:hover {
+            transform: scale(1.02);
+        }
+        .thumbnail {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            border-radius: 5px;
+        }
+        .label-pill {
+            display: inline-block;
+            padding: 0.25em 0.6em;
+            font-size: 75%;
+            font-weight: 700;
+            line-height: 1;
+            color: #fff;
+            text-align: center;
+            white-space: nowrap;
+            vertical-align: baseline;
+            border-radius: 10rem;
+            background-color: #6c757d;
+            margin: 2px;
+        }
+        .loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            color: white;
+            font-size: 1.5rem;
+        }
+        #dateFilters {
+            max-width: 500px;
+            margin: 0 auto 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="loadingOverlay" class="loading d-none">
+        <div>Loading recordings...</div>
+    </div>
+
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">Video Feed</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Live View</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/recordings.html">Recordings</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <h1 class="text-center mb-4">Surveillance Recordings</h1>
+        
+        <div id="dateFilters" class="row g-3 mb-4">
+            <div class="col-md-5">
+                <label for="startDate" class="form-label">Start Date</label>
+                <input type="date" class="form-control" id="startDate">
+            </div>
+            <div class="col-md-5">
+                <label for="endDate" class="form-label">End Date</label>
+                <input type="date" class="form-control" id="endDate">
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <button id="filterBtn" class="btn btn-primary w-100">Filter</button>
+            </div>
+        </div>
+
+        <div id="recordingsContainer" class="row">
+            <!-- Recordings will be added here -->
+            <div class="col-12 text-center" id="noRecordings">
+                <p>No recordings available. Objects detected during surveillance will appear here.</p>
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-center mt-3 mb-5">
+            <button id="loadMoreBtn" class="btn btn-outline-primary d-none">Load More</button>
+        </div>
+    </div>
+
+    <!-- Video Modal -->
+    <div class="modal fade" id="videoModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="videoModalLabel">Recording Playback</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <video id="videoPlayer" controls style="width:100%">
+                        Your browser does not support the video tag.
+                    </video>
+                    <div class="mt-3">
+                        <h6>Detection Details:</h6>
+                        <div id="modalDetectionDetails"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-danger" id="deleteRecordingBtn">Delete Recording</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // State variables
+        let currentOffset = 0;
+        let currentLimit = 12;
+        let hasMoreRecordings = false;
+        let currentRecordingId = null;
+        let recordingsMap = {};
+
+        // DOM elements
+        const recordingsContainer = document.getElementById('recordingsContainer');
+        const loadMoreBtn = document.getElementById('loadMoreBtn');
+        const noRecordings = document.getElementById('noRecordings');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const videoModal = new bootstrap.Modal(document.getElementById('videoModal'));
+        const videoPlayer = document.getElementById('videoPlayer');
+        const modalDetectionDetails = document.getElementById('modalDetectionDetails');
+        const deleteRecordingBtn = document.getElementById('deleteRecordingBtn');
+        const filterBtn = document.getElementById('filterBtn');
+        const startDateInput = document.getElementById('startDate');
+        const endDateInput = document.getElementById('endDate');
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', () => {
+            loadRecordings();
+            
+            // Set up event listeners
+            loadMoreBtn.addEventListener('click', () => {
+                currentOffset += currentLimit;
+                loadRecordings(false);
+            });
+            
+            deleteRecordingBtn.addEventListener('click', deleteCurrentRecording);
+            
+            filterBtn.addEventListener('click', () => {
+                currentOffset = 0;
+                loadRecordings(true);
+            });
+        });
+
+        // Load recordings from API
+        function loadRecordings(resetContent = true) {
+            showLoading(true);
+            
+            // Prepare API URL with filters
+            let apiUrl = `/recordings?limit=${currentLimit}&offset=${currentOffset}`;
+            
+            // Add date filters if specified
+            if (startDateInput.value) {
+                apiUrl += `&start_date=${startDateInput.value}T00:00:00`;
+            }
+            
+            if (endDateInput.value) {
+                apiUrl += `&end_date=${endDateInput.value}T23:59:59`;
+            }
+            
+            fetch(apiUrl)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Failed to load recordings');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    showLoading(false);
+                    
+                    if (resetContent) {
+                        recordingsContainer.innerHTML = '';
+                        recordingsMap = {};
+                    }
+                    
+                    const recordings = data.recordings;
+                    
+                    if (recordings.length === 0 && currentOffset === 0) {
+                        recordingsContainer.innerHTML = `
+                            <div class="col-12 text-center">
+                                <p>No recordings found matching your criteria.</p>
+                            </div>
+                        `;
+                        loadMoreBtn.classList.add('d-none');
+                        return;
+                    }
+                    
+                    // Hide the "no recordings" message if we have recordings
+                    noRecordings.classList.add('d-none');
+                    
+                    // Determine if we should show "load more" button
+                    hasMoreRecordings = recordings.length === currentLimit;
+                    loadMoreBtn.classList.toggle('d-none', !hasMoreRecordings);
+                    
+                    // Render recordings
+                    recordings.forEach(recording => {
+                        recordingsMap[recording.id] = recording;
+                        renderRecordingCard(recording);
+                    });
+                })
+                .catch(error => {
+                    showLoading(false);
+                    console.error('Error:', error);
+                    alert('Failed to load recordings. See console for details.');
+                });
+        }
+
+        // Render a recording card
+        function renderRecordingCard(recording) {
+            const dateTime = new Date(recording.timestamp);
+            const formattedDate = dateTime.toLocaleDateString();
+            const formattedTime = dateTime.toLocaleTimeString();
+            
+            // Extract object types for labels
+            const objects = JSON.parse(typeof recording.objects_detected === 'string' 
+                ? recording.objects_detected 
+                : JSON.stringify(recording.objects_detected));
+            
+            // Count occurrences of each object type
+            const objectCounts = {};
+            objects.forEach(obj => {
+                const className = obj.class;
+                objectCounts[className] = (objectCounts[className] || 0) + 1;
+            });
+            
+            // Create labels for each object type
+            const objectLabels = Object.entries(objectCounts)
+                .map(([className, count]) => `
+                    <span class="label-pill" style="background-color: #007bff;">
+                        ${className} (${count})
+                    </span>
+                `).join('');
+            
+            // Generate card HTML
+            const card = document.createElement('div');
+            card.className = 'col-lg-4 col-md-6';
+            card.innerHTML = `
+                <div class="card recording-card shadow-sm">
+                    <div class="position-relative">
+                        <img src="/recordings/${recording.thumbnail_path.split('/').pop()}" 
+                             class="thumbnail" alt="Recording thumbnail">
+                        <div class="position-absolute bottom-0 end-0 p-2 bg-dark text-white rounded-start">
+                            ${Math.round(recording.duration)}s
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <h5 class="card-title">${recording.stream_name}</h5>
+                        <p class="card-text">
+                            <small class="text-muted">${formattedDate} at ${formattedTime}</small>
+                        </p>
+                        <div class="mb-2">
+                            ${objectLabels}
+                        </div>
+                        <button class="btn btn-primary btn-sm w-100 mt-2 watch-btn" 
+                                data-recording-id="${recording.id}">
+                            Watch
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            // Add click event to the "Watch" button
+            card.querySelector('.watch-btn').addEventListener('click', () => {
+                openVideoModal(recording.id);
+            });
+            
+            // Add card to container
+            recordingsContainer.appendChild(card);
+        }
+
+        // Open video modal with the selected recording
+        function openVideoModal(recordingId) {
+            const recording = recordingsMap[recordingId];
+            
+            if (!recording) {
+                console.error('Recording not found:', recordingId);
+                return;
+            }
+            
+            currentRecordingId = recordingId;
+            
+            // Set video source
+            const fileName = recording.file_path.split('/').pop();
+            videoPlayer.src = `/recordings/${fileName}`;
+            videoPlayer.load();
+            
+            // Update modal title
+            document.getElementById('videoModalLabel').textContent = 
+                `${recording.stream_name} - ${new Date(recording.timestamp).toLocaleString()}`;
+            
+            // Display detection details
+            const objects = JSON.parse(typeof recording.objects_detected === 'string' 
+                ? recording.objects_detected 
+                : JSON.stringify(recording.objects_detected));
+            
+            // Group by class and show confidence
+            const detectionsByClass = {};
+            objects.forEach(obj => {
+                if (!detectionsByClass[obj.class]) {
+                    detectionsByClass[obj.class] = [];
+                }
+                detectionsByClass[obj.class].push(obj.confidence);
+            });
+            
+            // Format detection details HTML
+            let detailsHtml = '<ul class="list-group">';
+            Object.entries(detectionsByClass).forEach(([className, confidences]) => {
+                // Get max confidence for this class
+                const maxConfidence = Math.max(...confidences);
+                detailsHtml += `
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        ${className}
+                        <span class="badge bg-primary rounded-pill">
+                            ${confidences.length}× (max conf: ${maxConfidence.toFixed(2)})
+                        </span>
+                    </li>
+                `;
+            });
+            detailsHtml += '</ul>';
+            modalDetectionDetails.innerHTML = detailsHtml;
+            
+            // Show modal
+            videoModal.show();
+        }
+
+        // Delete the current recording
+        function deleteCurrentRecording() {
+            if (!currentRecordingId) return;
+            
+            if (!confirm('Are you sure you want to delete this recording? This action cannot be undone.')) {
+                return;
+            }
+            
+            fetch(`/recordings/${currentRecordingId}`, {
+                method: 'DELETE'
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to delete recording');
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Close modal and reload recordings
+                videoModal.hide();
+                
+                // Remove the deleted recording from the DOM
+                const elements = document.querySelectorAll(`[data-recording-id="${currentRecordingId}"]`);
+                elements.forEach(el => {
+                    const card = el.closest('.col-lg-4.col-md-6');
+                    if (card) {
+                        card.remove();
+                    }
+                });
+                
+                // Check if we need to load more or show "no recordings" message
+                if (recordingsContainer.children.length === 0) {
+                    recordingsContainer.innerHTML = `
+                        <div class="col-12 text-center">
+                            <p>No recordings available.</p>
+                        </div>
+                    `;
+                    loadMoreBtn.classList.add('d-none');
+                }
+                
+                alert('Recording deleted successfully');
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to delete recording');
+            });
+        }
+
+        // Show/hide loading overlay
+        function showLoading(show) {
+            loadingOverlay.classList.toggle('d-none', !show);
+        }
+    </script>
+</body>
+</html>

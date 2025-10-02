@@ -10,14 +10,20 @@ import threading
 import time
 from typing import Dict, List, Optional, Set
 
-from fastapi import FastAPI, HTTPException, Request, Query, Body
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi import FastAPI, HTTPException, Request, Query, Body, File, UploadFile
+from fastapi.responses import StreamingResponse, JSONResponse, FileResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 import uvicorn
+import os
 
 from videofeed.detector import DetectorManager
 from videofeed.credentials import get_credentials, APP_NAME
+from videofeed.recorder import RecordingManager
+from videofeed.api import RecordingsAPI
+from videofeed.utils import detect_host_ip
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
@@ -27,23 +33,105 @@ logger = logging.getLogger('video-api-server')
 # Create FastAPI app
 app = FastAPI(title="Video Feed API")
 
-# Configure CORS middleware to allow cross-origin requests
+# Get host IP for CORS configuration
+host_ip = detect_host_ip()
+
+# Configure CORS middleware with restricted origins
+allowed_origins = [
+    "http://localhost:8080",
+    "http://127.0.0.1:8080",
+    f"http://{host_ip}:8080",
+    "http://localhost:3000",  # If you have a separate frontend
+    "http://127.0.0.1:3000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins - replace with specific origins in production
+    allow_origins=allowed_origins,  # ✅ Restricted to specific origins
     allow_credentials=True,
-    allow_methods=["*"],  # Allow all methods
-    allow_headers=["*"],  # Allow all headers
+    allow_methods=["GET", "POST", "DELETE", "PUT"],  # ✅ Specific methods only
+    allow_headers=["Content-Type", "Authorization", "Cookie"],  # ✅ Specific headers
+    max_age=3600,  # Cache preflight requests for 1 hour
 )
+
+logger.info(f"CORS configured for origins: {allowed_origins}")
+
+# Configure templates
+templates_path = os.path.join(os.path.dirname(__file__), "templates")
+templates = Jinja2Templates(directory=templates_path)
 
 # Authentication schema for simple credential verification
 class UserCredentials(BaseModel):
     username: str
     password: str
 
-# Global detector manager instance
+# Global instances
 detector_manager = None
+recordings_api = None
 
+# Directory for recordings is configured at runtime
+recordings_directory = None
+
+def initialize_recordings_api():
+    """Initialize the recordings API if not already initialized.
+    
+    Returns:
+        bool: True if initialization was successful, False otherwise
+    """
+    global recordings_api, recordings_directory
+    
+    if recordings_api is not None:
+        return True
+    
+    try:
+        from videofeed.api import RecordingsAPI
+        
+        # First check if recordings_directory is set
+        if recordings_directory:
+            # Ensure path is expanded properly
+            expanded_dir = os.path.expanduser(recordings_directory)
+            db_path = os.path.join(expanded_dir, "recordings.db")
+            logger.info(f"Looking for database at: {db_path}")
+            
+            if os.path.exists(db_path):
+                logger.info(f"Initializing recordings API with database: {db_path}")
+                recordings_api = RecordingsAPI(db_path=db_path)
+                logger.info("Successfully initialized recordings API")
+                return True
+        
+        # If not found, try the default location in user's home directory
+        home_db_path = os.path.expanduser("~/video-feed-recordings/recordings.db")
+        logger.info(f"Looking for database at home path: {home_db_path}")
+        
+        if os.path.exists(home_db_path):
+            logger.info(f"Initializing recordings API with database from home directory: {home_db_path}")
+            recordings_api = RecordingsAPI(db_path=home_db_path)
+            
+            # Also set the recordings_directory if it wasn't set before
+            if not recordings_directory:
+                recordings_directory = os.path.dirname(home_db_path)
+                logger.info(f"Setting recordings directory to: {recordings_directory}")
+                
+            logger.info("Successfully initialized recordings API from home directory")
+            return True
+        
+        # If we get here, we couldn't find the database
+        logger.error(f"Database file not found in configured directory or home directory")
+        return False
+    except Exception as e:
+        logger.error(f"Failed to initialize recordings API: {e}")
+        return False
+
+
+def set_detector_manager(manager):
+    """Set the global detector manager instance.
+    
+    This function is called by the surveillance system to set the detector manager.
+    """
+    global detector_manager
+    detector_manager = manager
+    logger.info(f"Detector manager set with {len(manager.get_all_detectors())} detectors")
+    return detector_manager
 
 
 @app.get("/video/stream")
@@ -69,6 +157,67 @@ async def video_frame(detector_id: str):
     frame_bytes = detector_manager.get_frame_jpeg(detector_id)
     return StreamingResponse(content=io.BytesIO(frame_bytes), media_type="image/jpeg")
 
+@app.get("/", response_class=HTMLResponse)
+async def index(request: Request):
+    """Render the main viewer page."""
+    return templates.TemplateResponse("viewer.html", {"request": request})
+
+@app.get("/recordings.html", response_class=HTMLResponse)
+async def recordings_page(request: Request):
+    """Render the recordings page."""
+    return templates.TemplateResponse("recordings.html", {"request": request})
+
+@app.get("/recordings/{file_path:path}")
+async def serve_recording_file(file_path: str):
+    """Serve a recording file (video or thumbnail) with security checks."""
+    from pathlib import Path
+    
+    global recordings_directory
+    
+    if not recordings_directory:
+        raise HTTPException(status_code=404, detail="Recording directory not configured")
+    
+    try:
+        # Convert to Path objects and resolve to absolute paths
+        recordings_path = Path(recordings_directory).resolve()
+        requested_path = (recordings_path / file_path).resolve()
+        
+        # ✅ CRITICAL: Ensure requested path is within recordings directory
+        # This prevents path traversal attacks like "../../../etc/passwd"
+        if not requested_path.is_relative_to(recordings_path):
+            logger.warning(f"Path traversal attempt blocked: {file_path}")
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        # Check if file exists
+        if not requested_path.exists():
+            raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
+        
+        # Check if it's a file (not a directory)
+        if not requested_path.is_file():
+            raise HTTPException(status_code=403, detail="Not a file")
+        
+        # ✅ Validate file extension (only allow expected types)
+        allowed_extensions = {'.mp4', '.jpg', '.jpeg', '.png', '.webm', '.enc'}
+        if requested_path.suffix.lower() not in allowed_extensions:
+            logger.warning(f"Unauthorized file type access attempt: {requested_path.suffix}")
+            raise HTTPException(status_code=403, detail="File type not allowed")
+        
+        # Log access for audit
+        logger.info(f"File access: {file_path}")
+        
+        return FileResponse(requested_path)
+        
+    except ValueError as e:
+        # is_relative_to can raise ValueError
+        logger.error(f"Path validation error: {e}")
+        raise HTTPException(status_code=403, detail="Invalid path")
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        logger.error(f"Error serving file {file_path}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 @app.get("/status")
 async def get_status(feed: Optional[str] = None):
     """Get the detector status for one or all feeds."""
@@ -77,6 +226,279 @@ async def get_status(feed: Optional[str] = None):
         raise HTTPException(status_code=503, detail="Detector manager not initialized")
     
     return detector_manager.get_detector_status(feed)
+
+@app.get("/api/recordings")
+async def get_recordings(
+    stream_id: Optional[str] = None,
+    limit: int = Query(100, gt=0, le=1000),
+    offset: int = Query(0, ge=0),
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    object_type: Optional[str] = None,
+    min_confidence: Optional[float] = None,
+    sort_by: str = Query("timestamp", regex=r"^(timestamp|confidence|duration)$"),
+    sort_order: str = Query("desc", regex=r"^(asc|desc)$")
+):
+    """Get list of recordings from the database with filtering and sorting options."""
+    global recordings_api, recordings_directory
+    
+    # Try to initialize recordings API if needed
+    if not initialize_recordings_api():
+        raise HTTPException(status_code=503, detail="Recording API not initialized")
+    
+    try:
+        # Get recordings
+        recordings = recordings_api.get_recordings(
+            stream_id=stream_id,
+            limit=limit,
+            offset=offset,
+            start_date=start_date,
+            end_date=end_date,
+            object_type=object_type,
+            min_confidence=min_confidence,
+            sort_by=sort_by,
+            sort_order=sort_order
+        )
+        
+        # Get total count for pagination
+        total = recordings_api.get_recordings_count(
+            stream_id=stream_id,
+            start_date=start_date,
+            end_date=end_date,
+            object_type=object_type,
+            min_confidence=min_confidence
+        )
+        
+        # Transform file paths to URLs
+        for rec in recordings:
+            if rec.get('file_path'):
+                try:
+                    # Ensure both paths are absolute before computing relative path
+                    abs_file_path = os.path.abspath(os.path.expanduser(rec['file_path']))
+                    abs_recordings_dir = os.path.abspath(os.path.expanduser(recordings_directory))
+                    rel_path = os.path.relpath(abs_file_path, abs_recordings_dir)
+                    rec['file_url'] = f"/recordings/{rel_path}"
+                except Exception as e:
+                    logger.error(f"Error creating file URL: {e}")
+                    rec['file_url'] = None
+            
+            if rec.get('thumbnail_path'):
+                try:
+                    # Ensure both paths are absolute before computing relative path
+                    abs_thumb_path = os.path.abspath(os.path.expanduser(rec['thumbnail_path']))
+                    abs_recordings_dir = os.path.abspath(os.path.expanduser(recordings_directory))
+                    rel_path = os.path.relpath(abs_thumb_path, abs_recordings_dir)
+                    rec['thumbnail_url'] = f"/recordings/{rel_path}"
+                except Exception as e:
+                    logger.error(f"Error creating thumbnail URL: {e}")
+                    rec['thumbnail_url'] = None
+        
+        return {
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+            "recordings": recordings
+        }
+    except Exception as e:
+        logger.error(f"Error retrieving recordings: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/recordings/{recording_id}")
+async def delete_recording(recording_id: int):
+    """Delete a recording by ID."""
+    global recordings_api
+    
+    # Try to initialize recordings API if needed
+    if not initialize_recordings_api():
+        raise HTTPException(status_code=503, detail="Recording API not initialized")
+    
+    try:
+        success = recordings_api.delete_recording(recording_id)
+        if not success:
+            raise HTTPException(status_code=404, detail=f"Recording {recording_id} not found")
+        
+        return {"success": True, "message": f"Recording {recording_id} deleted"}
+    except Exception as e:
+        logger.error(f"Error deleting recording {recording_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/recordings/{recording_id}")
+async def get_recording_detail(recording_id: int):
+    """Get detailed information about a specific recording."""
+    global recordings_api, recordings_directory
+    
+    # Try to initialize recordings API if needed
+    if not initialize_recordings_api():
+        raise HTTPException(status_code=503, detail="Recording API not initialized")
+    
+    try:
+        recording = recordings_api.get_recording_by_id(recording_id)
+        if not recording:
+            raise HTTPException(status_code=404, detail=f"Recording {recording_id} not found")
+        
+        # Transform file paths to URLs
+        if recording.get('file_path'):
+            try:
+                # Ensure both paths are absolute before computing relative path
+                abs_file_path = os.path.abspath(os.path.expanduser(recording['file_path']))
+                abs_recordings_dir = os.path.abspath(os.path.expanduser(recordings_directory))
+                rel_path = os.path.relpath(abs_file_path, abs_recordings_dir)
+                recording['file_url'] = f"/recordings/{rel_path}"
+                logger.info(f"Created file URL: {recording['file_url']} from {recording['file_path']}")
+            except Exception as e:
+                logger.error(f"Error creating file URL: {e}")
+                recording['file_url'] = None
+        
+        if recording.get('thumbnail_path'):
+            try:
+                # Ensure both paths are absolute before computing relative path
+                abs_thumb_path = os.path.abspath(os.path.expanduser(recording['thumbnail_path']))
+                abs_recordings_dir = os.path.abspath(os.path.expanduser(recordings_directory))
+                rel_path = os.path.relpath(abs_thumb_path, abs_recordings_dir)
+                recording['thumbnail_url'] = f"/recordings/{rel_path}"
+                logger.info(f"Created thumbnail URL: {recording['thumbnail_url']} from {recording['thumbnail_path']}")
+            except Exception as e:
+                logger.error(f"Error creating thumbnail URL: {e}")
+                recording['thumbnail_url'] = None
+        
+        return recording
+    except Exception as e:
+        logger.error(f"Error retrieving recording {recording_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/alerts")
+async def get_alerts(
+    limit: int = Query(100, gt=0, le=1000),
+    offset: int = Query(0, ge=0),
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    object_type: Optional[str] = None,
+    min_confidence: float = Query(0.5, ge=0, le=1.0)
+):
+    """Get detection alerts from recordings, for event monitoring."""
+    global recordings_api, recordings_directory
+    
+    # Try to initialize recordings API if needed
+    if not initialize_recordings_api():
+        raise HTTPException(status_code=503, detail="Recording API not initialized")
+    
+    try:
+        # Get alerts
+        alerts = recordings_api.get_alerts(
+            limit=limit,
+            offset=offset,
+            start_date=start_date,
+            end_date=end_date,
+            object_type=object_type,
+            min_confidence=min_confidence
+        )
+        
+        # Get total count for pagination
+        total = recordings_api.get_alerts_count(
+            start_date=start_date,
+            end_date=end_date,
+            object_type=object_type,
+            min_confidence=min_confidence
+        )
+        
+        # Transform file paths to URLs
+        for alert in alerts:
+            if alert.get('thumbnail_path'):
+                try:
+                    # Ensure both paths are absolute before computing relative path
+                    abs_thumb_path = os.path.abspath(os.path.expanduser(alert['thumbnail_path']))
+                    abs_recordings_dir = os.path.abspath(os.path.expanduser(recordings_directory))
+                    rel_path = os.path.relpath(abs_thumb_path, abs_recordings_dir)
+                    alert['thumbnail_url'] = f"/recordings/{rel_path}"
+                except Exception as e:
+                    logger.error(f"Error creating thumbnail URL for alert: {e}")
+                    alert['thumbnail_url'] = None
+        
+        return {
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+            "alerts": alerts
+        }
+    except Exception as e:
+        logger.error(f"Error retrieving alerts: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/stats/objects")
+async def get_object_stats(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    stream_id: Optional[str] = None
+):
+    """Get statistics about detected objects over time."""
+    global recordings_api
+    
+    # Try to initialize recordings API if needed
+    if not initialize_recordings_api():
+        raise HTTPException(status_code=503, detail="Recording API not initialized")
+    
+    try:
+        stats = recordings_api.get_object_stats(
+            start_date=start_date,
+            end_date=end_date,
+            stream_id=stream_id
+        )
+        return {"stats": stats}
+    except Exception as e:
+        logger.error(f"Error retrieving object statistics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/stats/times")
+async def get_time_stats(
+    object_type: Optional[str] = None,
+    days: int = Query(7, gt=0, le=90),
+    stream_id: Optional[str] = None
+):
+    """Get detection statistics by time of day."""
+    global recordings_api
+    
+    # Try to initialize recordings API if needed
+    if not initialize_recordings_api():
+        raise HTTPException(status_code=503, detail="Recording API not initialized")
+    
+    try:
+        stats = recordings_api.get_time_stats(
+            object_type=object_type,
+            days=days,
+            stream_id=stream_id
+        )
+        return {"stats": stats}
+    except Exception as e:
+        logger.error(f"Error retrieving time statistics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/streams")
+async def get_streams():
+    """Get list of all video streams with recording statistics."""
+    global detector_manager, recordings_api
+    
+    if detector_manager is None:
+        raise HTTPException(status_code=503, detail="Detector manager not initialized")
+        
+    # Try to initialize recordings API if needed
+    if not initialize_recordings_api():
+        # If we can't initialize, just return streams without recording stats
+        streams = detector_manager.get_detector_status()
+        for stream in streams.values():
+            stream['recording_stats'] = None
+        return {"streams": list(streams.values())}
+    
+    try:
+        streams = detector_manager.get_detector_status()
+        for stream_id, stream in streams.items():
+            # Get stats for this stream
+            stats = recordings_api.get_stream_stats(stream_id)
+            stream['recording_stats'] = stats
+            
+        return {"streams": list(streams.values())}
+    except Exception as e:
+        logger.error(f"Error retrieving streams: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/feeds")
 async def get_feeds():
@@ -122,8 +544,9 @@ async def shutdown_detector():
     global detector_manager
     logger.info("Server is shutting down, stopping detector...")
     if detector_manager:
+        logger.info("Stopping all detectors...")
         detector_manager.stop_all()
-        detector_manager = None
+        logger.info("All detectors stopped successfully")
     logger.info("Detector stopped successfully")
 
 
@@ -167,7 +590,12 @@ def start_visualizer(
     port: int = 8000,
     model_path: str = "yolov8n.pt",
     confidence: float = 0.4,
-    resolution: tuple = (960, 540)
+    resolution: tuple = (960, 540),
+    enable_recording: bool = False,
+    recordings_dir: Optional[str] = None,
+    min_confidence: float = 0.5,
+    pre_detection_buffer: int = 5,
+    post_detection_buffer: int = 5
 ):
     """Start the API server with object detection for multiple streams.
     
@@ -178,11 +606,47 @@ def start_visualizer(
         model_path: Path to YOLO model or model name
         confidence: Detection confidence threshold
         resolution: Output resolution (width, height)
+        enable_recording: Whether to enable recording of detected objects
+        recordings_dir: Directory to store recordings
     """
-    global detector_manager
+    global detector_manager, recordings_api
+    
+    # Initialize the recording manager if enabled
+    recording_manager = None
+    global recordings_directory, recordings_api
+    
+    # Set recordings directory even if recording is not enabled
+    # This allows accessing existing recordings even when not recording new ones
+    if recordings_dir:
+        # Make sure to expand user path (~ or $HOME)
+        expanded_path = os.path.expanduser(recordings_dir)
+        recordings_directory = expanded_path
+        logger.info(f"Using recordings directory: {recordings_directory} (expanded from {recordings_dir})")
+    else:
+        default_path = os.path.expanduser("~/video-feed-recordings")
+        recordings_directory = default_path
+        logger.info(f"Using default recordings directory: {recordings_directory}")
+        
+    # Ensure the directory exists
+    os.makedirs(recordings_directory, exist_ok=True)
+    
+    if enable_recording:
+        logger.info("Initializing recording manager")
+        recording_manager = RecordingManager(
+            recordings_dir=recordings_directory,
+            min_confidence=min_confidence,
+            pre_detection_buffer=pre_detection_buffer,
+            post_detection_buffer=post_detection_buffer
+        )
+        recording_manager.start()
+        
+        # Initialize the recordings API with shared database connection
+        logger.info("Initializing recordings API with shared connection")
+        recordings_api = RecordingsAPI(db_connection=recording_manager.get_database_connection())
+        logger.info(f"Recordings API initialized with database at {recording_manager.get_database_path()}")
     
     # Initialize the detector manager
-    detector_manager = DetectorManager()
+    detector_manager = DetectorManager(recording_manager=recording_manager)
     logger.info(f"Initializing detection for {len(rtsp_urls)} streams")
     
     # Define our own signal handler for graceful shutdown
@@ -248,4 +712,11 @@ def start_visualizer(
             logger.info("Final cleanup of all detectors...")
             detector_manager.stop_all()
             detector_manager = None
-            logger.info("All API server resources released")
+        
+        # Close the API connection
+        if recordings_api:
+            logger.info("Closing recordings API connection...")
+            recordings_api.close()
+            recordings_api = None
+            
+        logger.info("All API server resources released")

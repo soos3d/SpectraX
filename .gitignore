@@ -30,6 +30,23 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+# Surveillance system - Security sensitive files
+video-feed-recordings/
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Additional security files
+*.pem
+*.p12
+*.pfx
+.encryption_key
+.encryption_salt
+audit.log
+security.log
+secrets/
+
 # PyInstaller
 #  Usually these files are written by a python script from a template
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
