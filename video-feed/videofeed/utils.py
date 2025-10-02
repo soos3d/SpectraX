@@ -10,6 +10,32 @@ from typing import Dict, List, Optional
 from .constants import MEDIAMTX_BIN
 
 
+def resolve_model_path(model_name: str) -> str:
+    """Resolve YOLO model path to use package models directory.
+    
+    Args:
+        model_name: Model filename (e.g., 'yolov8n.pt') or full path
+        
+    Returns:
+        Full path to model file, or original if it's already a full path
+    """
+    model_path = Path(model_name)
+    
+    # If it's already an absolute path or exists as-is, use it
+    if model_path.is_absolute() or model_path.exists():
+        return str(model_path)
+    
+    # Check in package models directory
+    package_models_dir = Path(__file__).parent.parent / "models"
+    package_model_path = package_models_dir / model_name
+    
+    if package_model_path.exists():
+        return str(package_model_path)
+    
+    # If not found in package, return original (will trigger download)
+    return model_name
+
+
 def launch_mediamtx(cfg_path: Path) -> subprocess.Popen:
     """Launch the MediaMTX server with the given configuration.
     
@@ -19,8 +45,15 @@ def launch_mediamtx(cfg_path: Path) -> subprocess.Popen:
     Returns:
         Process object for the running server
     """
+    typer.echo(f"🔧 Launching MediaMTX with config: {cfg_path}")
+    
+    # Verify config file exists
+    if not cfg_path.exists():
+        typer.secho(f"❌ Config file not found: {cfg_path}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+    
     return subprocess.Popen(
-        [MEDIAMTX_BIN, cfg_path],
+        [MEDIAMTX_BIN, str(cfg_path)],
         stdout=subprocess.PIPE, 
         stderr=subprocess.PIPE
     )

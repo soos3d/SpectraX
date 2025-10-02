@@ -10,6 +10,10 @@ __pycache__/
 server.crt  
 server.key
 mediamtx.yml
+
+# YOLO Models (large files)
+video-feed/models/*.pt
+*.pt
 # Distribution / packaging
 .Python
 build/
@@ -179,3 +183,41 @@ cython_debug/
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+
+# YOLO models
+*.pt
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Thumbnails
+._*
+
+# Temporary files
+*~
+*.swp
+*.swo
+*.tmp
+
+# IDE
+.vscode/
+.idea/
+*.sublime-*
+
+# Recordings and media
+video-feed-recordings/
+recordings/
+*.mp4
+*.avi
+*.mkv
+*.jpg
+*.jpeg
+*.png
+!docs/**/*.png
+!docs/**/*.jpg
+
+# Obsolete directories (removed from codebase)
+cli-only/
+basic-ui/streamlit_ui.py
