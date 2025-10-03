@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# SentriX Surveillance System Launcher
+# SpectraX Surveillance System Launcher
 # Simple script to start your surveillance system
 
-echo "🎥 SentriX Surveillance System"
+echo "🎥 SpectraX Surveillance System"
 echo "==============================="
 echo ""
 
