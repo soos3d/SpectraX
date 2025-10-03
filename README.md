@@ -1,8 +1,8 @@
-# SentriX — Unified Surveillance System
+# SpectraX — Unified Surveillance System
 
-SentriX is a streamlined surveillance system for turning any phone, tablet, or IP camera into a secure RTSP/HLS streaming source with object detection capabilities. It's built for people who need a simple, powerful, and private way to set up a surveillance system or a quick streaming solution.
+SpectraX is a streamlined surveillance system for turning any phone, tablet, or IP camera into a secure RTSP/HLS streaming source with object detection capabilities. It's built for people who need a simple, powerful, and private way to set up a surveillance system or a quick streaming solution.
 
-> ⚠️ Note: SentriX uses a self-signed certificate for RTSPS by default, which can trigger security warnings in some clients. For production use, replace it with a certificate from a trusted CA.
+> ⚠️ Note: SpectraX uses a self-signed certificate for RTSPS by default, which can trigger security warnings in some clients. For production use, replace it with a certificate from a trusted CA.
 
 ## Table of Contents
 
@@ -19,7 +19,7 @@ SentriX is a streamlined surveillance system for turning any phone, tablet, or I
 
 ## What It Does
 
-SentriX wraps [MediaMTX](https://github.com/bluenviron/mediamtx), a powerful RTSP/HLS server, with intelligent object detection and recording capabilities. Turn any device with a camera into a smart surveillance system in minutes.
+SpectraX wraps [MediaMTX](https://github.com/bluenviron/mediamtx), a powerful RTSP/HLS server, with intelligent object detection and recording capabilities. Turn any device with a camera into a smart surveillance system in minutes.
 
 ## Key Features
 
@@ -58,7 +58,7 @@ SentriX wraps [MediaMTX](https://github.com/bluenviron/mediamtx), a powerful RTS
 
 ## System Architecture
 
-SentriX has been streamlined into a clean, modular architecture:
+SpectraX has been streamlined into a clean, modular architecture:
 
 ```
 root/
@@ -145,8 +145,8 @@ root/
 
 ```bash
 # Clone the repository
-git clone https://github.com/soos3d/sentryx.git
-cd sentryx
+git clone https://github.com/soos3d/SpectraX.git
+cd SpectraX
 
 # Create virtual environment
 python3 -m venv venv
@@ -270,7 +270,7 @@ When the system starts, it displays connection URLs:
 
 ## Object Detection
 
-SentriX uses [YOLOv8 from Ultralytics](https://github.com/ultralytics/ultralytics) for real-time object detection on your video streams.
+SpectraX uses [YOLOv8 from Ultralytics](https://github.com/ultralytics/ultralytics) for real-time object detection on your video streams.
 
 ### Available Models
 
