@@ -52,7 +52,8 @@ class RecordingManager:
             self.recordings_dir = Path(os.path.expanduser("~/video-feed-recordings"))
             
         self.recordings_dir.mkdir(exist_ok=True, parents=True)
-        logger.info(f"Using recordings directory: {self.recordings_dir} (absolute: {self.recordings_dir.absolute()})")
+        # Silent - shown in main status display
+        # logger.info(f"Using recordings directory: {self.recordings_dir} (absolute: {self.recordings_dir.absolute()})")
         
         # Set up database path
         if db_path:
@@ -108,7 +109,8 @@ class RecordingManager:
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_recordings_stream_id ON recordings(stream_id)')
             
             self.db_conn.commit()
-            logger.info(f"Database initialized: {self.db_path}")
+            # Silent - shown in main status display
+            # logger.info(f"Database initialized: {self.db_path}")
         except Exception as e:
             logger.error(f"Database initialization failed: {e}")
             raise
@@ -121,7 +123,8 @@ class RecordingManager:
         self.running = True
         self.cleanup_thread = threading.Thread(target=self._storage_cleanup_loop, daemon=True)
         self.cleanup_thread.start()
-        logger.info("Recording manager started")
+        # Silent - shown in main status display
+        # logger.info("Recording manager started")
         
     def stop(self):
         """Stop all recording manager threads."""
@@ -161,8 +164,8 @@ class RecordingManager:
                 'last_recording': 0,
                 'recording_in_progress': False,
                 'last_detection_time': 0,
-                'cooldown_timer': None,
                 'timer_lock': threading.Lock(),
+                'cooldown_timer': None,
                 'frame_count': 0,
                 'fps_start_time': time.time(),
                 'actual_fps': self.target_fps,
@@ -170,7 +173,8 @@ class RecordingManager:
             }
             # Initialize FPS tracking
             self.stream_fps[stream_id] = self.target_fps
-        logger.info(f"Registered stream {stream_id} ({stream_name}) for recording with {estimated_buffer_size} frame buffer")
+            # Silent - not needed in output
+            # logger.info(f"Registered stream {stream_id} ({stream_name}) for recording with {estimated_buffer_size} frame buffer")
             
     def unregister_stream(self, stream_id: str):
         """Unregister a stream from recording.

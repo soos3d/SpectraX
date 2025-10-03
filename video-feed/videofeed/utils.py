@@ -45,7 +45,8 @@ def launch_mediamtx(cfg_path: Path) -> subprocess.Popen:
     Returns:
         Process object for the running server
     """
-    typer.echo(f"🔧 Launching MediaMTX with config: {cfg_path}")
+    # Silent launch - config path not needed in output
+    # typer.echo(f"🔧 Launching MediaMTX with config: {cfg_path}")
     
     # Verify config file exists
     if not cfg_path.exists():

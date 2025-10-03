@@ -59,7 +59,8 @@ app.add_middleware(
     max_age=3600,  # Cache preflight requests for 1 hour
 )
 
-logger.info(f"CORS configured for origins: {allowed_origins}")
+# CORS configured silently - no need to log on every startup
+# logger.info(f"CORS configured for origins: {allowed_origins}")
 
 # Include all route modules
 app.include_router(video_router)
@@ -87,7 +88,8 @@ def set_detector_manager(manager):
     video_routes.set_detector_manager(manager)
     statistics_routes.set_detector_manager(manager)
     
-    logger.info(f"Detector manager set with {len(manager.get_all_detectors())} detectors")
+    # Detector manager set silently
+    # logger.info(f"Detector manager set with {len(manager.get_all_detectors())} detectors")
     return detector_manager
 
 

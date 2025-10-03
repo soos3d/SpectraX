@@ -75,9 +75,10 @@ class RTSPObjectDetector:
     def load_model(self) -> None:
         """Load YOLO model."""
         try:
-            logger.info(f"Loading YOLO model: {self.model_path}")
+            # Silent - model loading shown once in DetectorManager
+            # logger.info(f"Loading YOLO model: {self.model_path}")
             self.model = YOLO(self.model_path)
-            logger.info("Model loaded successfully")
+            # logger.info("Model loaded successfully")
         except Exception as e:
             logger.error(f"Failed to load model: {e}")
             raise
@@ -105,7 +106,8 @@ class RTSPObjectDetector:
             stream_name = self.get_name()
             self.recording_manager.register_stream(self.detector_id, stream_name)
             
-        logger.info("Detector started")
+        # Silent - shown in main status
+        # logger.info("Detector started")
         
     def stop(self) -> None:
         """Stop all processing threads."""
@@ -159,7 +161,8 @@ class RTSPObjectDetector:
             
         # Mask credentials in log message for security
         log_url = self._mask_credentials(self.source_url)
-        logger.info(f"Connecting to stream: {log_url}")
+        # Silent - connection status shown in main display
+        # logger.info(f"Connecting to stream: {log_url}")
         
         # Set transport protocol options for RTSP/RTSPS
         # Use TCP as transport to avoid packet loss
@@ -176,7 +179,8 @@ class RTSPObjectDetector:
             logger.error("Failed to connect to stream. Check URL and credentials.")
             return False
         
-        logger.info("Connected to stream successfully")
+        # Silent - connection status shown in main display
+        # logger.info("Connected to stream successfully")
         return True
         
     def _mask_credentials(self, url: str) -> str:
@@ -426,6 +430,7 @@ class DetectorManager:
         
         # Reuse model if already loaded
         if resolved_model_path not in self.model_cache:
+            # Show model loading only once
             logger.info(f"Loading model {resolved_model_path} for the first time")
             model = YOLO(resolved_model_path)
             self.model_cache[resolved_model_path] = model
@@ -450,7 +455,8 @@ class DetectorManager:
             if self.default_detector_id is None:
                 self.default_detector_id = detector_id
                 
-        logger.info(f"Added detector {detector_id} for stream {detector.get_name()}")
+        # Silent - shown in main status
+        # logger.info(f"Added detector {detector_id} for stream {detector.get_name()}")
         return detector_id
     
     def remove_detector(self, detector_id: str) -> bool:

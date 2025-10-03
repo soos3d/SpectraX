@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# QuickCast Surveillance System Launcher
+# SpectraX Surveillance System Launcher
 # Simple script to start your surveillance system
 
-echo "🎥 QuickCast Surveillance System"
-echo "================================"
+echo "🎥 SpectraX Surveillance System"
+echo "==============================="
 echo ""
 
 # Set the project root directory (parent of scripts/)
